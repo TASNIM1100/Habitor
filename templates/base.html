@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en" data-theme="{{ theme }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="{{ themes[theme][2] }}">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="Habitor — train your habits with friends. Verified check-ins, streaks, leagues and challenges.">
+  <meta name="csrf-token" content="{{ csrf }}">
+  <meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"historyCacheSize":0,"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"4..","swap":true,"error":false},{"code":"...","swap":false,"error":true}]}'>
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Habitor">
+  <meta name="format-detection" content="telephone=no">
+  <title>{% block title %}Habitor{% endblock %}</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icon.svg?v={{ STATIC_V }}" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icon-180.png?v={{ STATIC_V }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,700;1,800&family=Barlow:wght@400;500;600;700&display=swap">
+  {% if 'leaflet' in needs %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="anonymous">{% endif %}
+  <link rel="stylesheet" href="/static/style.css?v={{ STATIC_V }}">
+  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js" defer></script>
+  {% if 'leaflet' in needs %}<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous" defer></script>{% endif %}
+  {% if 'qr' in needs %}<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" defer></script>{% endif %}
+  {% if 'qrgen' in needs %}<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js" defer></script>{% endif %}
+  <script src="/static/app.js?v={{ STATIC_V }}" defer></script>
+</head>
+<body class="page-{{ page }}{% if me %} is-signed-in{% endif %}" hx-headers='{"X-CSRF-Token": "{{ csrf }}"}' data-vapid="{{ VAPID_PUBLIC_KEY }}">
+  <svg width="0" height="0" class="sprite" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+      <symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+      <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 5h3v2a4 4 0 0 1-3 3.87M7 5H4v2a4 4 0 0 0 3 3.87"/></symbol>
+      <symbol id="i-swords" viewBox="0 0 24 24"><path d="M14.5 17.5 3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M9.5 17.5 21 6V3h-3L6.5 14.5M11 19l-6-6M8 16l-4 4M5 21l-2-2"/></symbol>
+      <symbol id="i-skull" viewBox="0 0 24 24"><path d="M8 20v2h8v-2M16 20a2 2 0 0 0 1.56-3.25 8 8 0 1 0-11.12 0A2 2 0 0 0 8 20z"/><circle cx="9" cy="12" r="1.2"/><circle cx="15" cy="12" r="1.2"/></symbol>
+      <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14M15 6v14"/></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/><circle cx="9" cy="7" r="4"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+      <symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 22V4a1 1 0 0 1 1-1h13l-2 4 2 4H5"/></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18M7 16v-4M12 16V8M17 16v-7"/></symbol>
+      <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
+      <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+      <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+      <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5c-.4-.9-1.4-1.5-2.5-1.5-1.5 0-2.5.8-2.5 2s1.1 1.7 2.5 2 2.5.8 2.5 2-1 2-2.5 2c-1.1 0-2.1-.6-2.5-1.5M12 6.5v1.5M12 16v1.5"/></symbol>
+      <symbol id="i-flame" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+      <symbol id="i-camera" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+      <symbol id="i-pin" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></symbol>
+      <symbol id="i-qr" viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3zM18 14h3M14 18v3"/></symbol>
+      <symbol id="i-nfc" viewBox="0 0 24 24"><path d="M6 8.32a7.43 7.43 0 0 1 0 7.36M9.46 6.21a11.76 11.76 0 0 1 0 11.58M12.91 4.1a15.91 15.91 0 0 1 .01 15.8M16.37 2a20.16 20.16 0 0 1 0 20"/></symbol>
+      <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></symbol>
+      <symbol id="i-scan" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h10"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+      <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01"/></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+      <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+      <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+      <symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+      <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></symbol>
+      <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></symbol>
+      <symbol id="i-megaphone" viewBox="0 0 24 24"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6l-5 4H4a1 1 0 0 0-1 1zM15 9a3 3 0 0 1 0 6M18 6a7 7 0 0 1 0 12"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
+      <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></symbol>
+      <symbol id="i-printer" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+      <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+      <symbol id="i-archive" viewBox="0 0 24 24"><path d="M3 4h18v4H3zM5 8v12h14V8M10 12h4"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+      <symbol id="i-gift" viewBox="0 0 24 24"><path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></symbol>
+      <symbol id="i-heart" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7z"/></symbol>
+      <symbol id="i-crown" viewBox="0 0 24 24"><path d="M2 18h20M3 8l4.5 4L12 5l4.5 7L21 8l-2 10H5z"/></symbol>
+      <symbol id="i-award" viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M15.48 12.89 17 22l-5-3-5 3 1.52-9.11"/></symbol>
+      <symbol id="i-volume" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4zM15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/></symbol>
+      <symbol id="i-mute" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6"/></symbol>
+      <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></symbol>
+      <symbol id="i-vibrate" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M3 8v8M21 8v8"/></symbol>
+      <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 22a10 10 0 1 1 10-10c0 2.5-2 3.5-4 3.5h-2a2 2 0 0 0-1.5 3.3c.6.7.4 3.2-2.5 3.2z"/><circle cx="7.5" cy="11" r="1.3"/><circle cx="10.5" cy="7" r="1.3"/><circle cx="15.5" cy="7.5" r="1.3"/></symbol>
+      <symbol id="i-wifi-off" viewBox="0 0 24 24"><path d="M2 2l20 20M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 5.17-2.83M19 13a10 10 0 0 0-2.3-1.8M2 8.82a15 15 0 0 1 4.17-2.65M22 8.82A15 15 0 0 0 11.1 5M12 20h.01"/></symbol>
+      <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    </defs>
+  </svg>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="loadbar" id="loadbar" aria-hidden="true"></div>
+  <div class="offline-banner" data-offline hidden role="status">
+    <svg class="icon" aria-hidden="true"><use href="#i-wifi-off"></use></svg>You're offline — changes will work again when you reconnect.
+  </div>
+  {% import "partials.html" as p with context %}
+
+  {% if me and hud %}
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Main navigation">
+      <a class="brand" href="/"><img src="/icon.svg?v={{ STATIC_V }}" alt="" width="36" height="36"><span>Habitor</span></a>
+      <a class="btn btn-accent btn-block sidebar-cta" href="/scan">{{ p.icon('scan') }}Scan checkpoint</a>
+      <nav class="side-nav">
+        <p class="nav-label">Train</p>
+        <a class="nav-item" href="/" {% if page == 'home' %}aria-current="page"{% endif %}>{{ p.icon('home') }}Today</a>
+        <a class="nav-item" href="/feed" {% if page == 'feed' %}aria-current="page"{% endif %}>{{ p.icon('activity') }}Feed</a>
+        <a class="nav-item" href="/habits" {% if page in ('habits', 'habit_form', 'habit_qr', 'timer') %}aria-current="page"{% endif %}>{{ p.icon('check-circle') }}My quests</a>
+        <p class="nav-label">Compete</p>
+        <a class="nav-item" href="/boards" {% if page == 'boards' %}aria-current="page"{% endif %}>{{ p.icon('trophy') }}Leaderboards</a>
+        <a class="nav-item" href="/challenges" {% if page == 'challenges' %}aria-current="page"{% endif %}>{{ p.icon('swords') }}Challenges</a>
+        <a class="nav-item" href="/boss" {% if page == 'boss' %}aria-current="page"{% endif %}>{{ p.icon('skull') }}Boss battle</a>
+        <a class="nav-item" href="/map" {% if page == 'map' %}aria-current="page"{% endif %}>{{ p.icon('map') }}Territory</a>
+        <p class="nav-label">Team</p>
+        <a class="nav-item" href="/parties" {% if page in ('parties', 'party', 'party_join') %}aria-current="page"{% endif %}>{{ p.icon('flag') }}Parties</a>
+        <a class="nav-item" href="/friends" {% if page in ('friends', 'invite_confirm') %}aria-current="page"{% endif %}>{{ p.icon('users') }}Friends</a>
+        <p class="nav-label">You</p>
+        <a class="nav-item" href="/u/{{ me.username }}" {% if page == 'profile' %}aria-current="page"{% endif %}>{{ p.icon('user') }}Profile</a>
+        <a class="nav-item" href="/stats" {% if page in ('stats', 'recap') %}aria-current="page"{% endif %}>{{ p.icon('chart') }}Insights</a>
+        <a class="nav-item" href="/settings" {% if page == 'settings' %}aria-current="page"{% endif %}>{{ p.icon('settings') }}Settings</a>
+      </nav>
+      <div class="sidebar-foot">
+        {{ p.theme_switcher('mini') }}
+      </div>
+    </aside>
+    <div class="main-col">
+      {{ p.hud(hud) }}
+      <div id="poller" hx-get="/hud/events" hx-trigger="load delay:800ms, every 20s" hx-swap="none" aria-hidden="true"></div>
+      <main id="main" class="content" tabindex="-1" {% if page in ('home', 'feed', 'boards') %}data-ptr{% endif %}>
+        <div class="ptr-indicator" aria-hidden="true">{{ p.icon('refresh') }}</div>
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+  <nav class="tabbar" aria-label="Quick navigation">
+    <a href="/" {% if page == 'home' %}aria-current="page"{% endif %}>{{ p.icon('home') }}<span>Today</span></a>
+    <a href="/feed" {% if page == 'feed' %}aria-current="page"{% endif %}>{{ p.icon('activity') }}<span>Feed</span></a>
+    <button type="button" class="tab-fab" data-quick-open aria-label="Quick check-in" aria-haspopup="dialog">{{ p.icon('plus') }}</button>
+    <a href="/challenges" {% if page in ('challenges', 'boss', 'map', 'parties', 'party', 'boards') %}aria-current="page"{% endif %}>{{ p.icon('trophy') }}<span>Compete</span></a>
+    <a href="/u/{{ me.username }}" {% if page in ('profile', 'stats', 'settings', 'friends', 'habits', 'recap', 'habit_form') %}aria-current="page"{% endif %}>{{ p.icon('user') }}<span>Me</span></a>
+  </nav>
+  <dialog class="modal sheet" id="quick-sheet" aria-labelledby="quick-title">
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <header class="modal-head"><h2 id="quick-title">Quick check-in</h2><form method="dialog"><button class="icon-btn" aria-label="Close">{{ p.icon('x') }}</button></form></header>
+    <div class="quick-actions">
+      <a class="quick-action" href="/scan">{{ p.icon('qr') }}<span>Scan QR</span></a>
+      <a class="quick-action" href="/scan#nfc">{{ p.icon('nfc') }}<span>Tap NFC</span></a>
+      <a class="quick-action" href="/habits/new">{{ p.icon('plus') }}<span>New quest</span></a>
+      <a class="quick-action" href="/friends#friend-code">{{ p.icon('users') }}<span>Add friend</span></a>
+    </div>
+    <div id="quick-list" class="quick-list" hx-get="/quick" hx-trigger="quick-open from:body" hx-swap="innerHTML">
+      <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+    </div>
+  </dialog>
+  {% else %}
+  <main id="main" class="content content-public" tabindex="-1">
+    {% block public %}{{ self.content() }}{% endblock %}
+  </main>
+  {% endif %}
+
+  <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
+  <div id="modal-root"></div>
+  <div class="fx-layer" aria-hidden="true">
+    <div class="levelup" data-levelup><span class="levelup-badge">{{ p.icon('award') }}</span><span class="levelup-text">Level up</span><b data-levelup-num></b></div>
+    <div class="stamp" data-stamp>Streak saved</div>
+  </div>
+  <dialog class="modal sheet" data-taunt-dialog aria-labelledby="taunted-title">
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <div class="modal-hero"><span class="hero-emoji" data-taunt-sticker aria-hidden="true"></span></div>
+    <p class="eyebrow center" id="taunted-title"><span data-taunt-from></span> taunted you</p>
+    <p class="taunt-text center" data-taunt-text></p>
+    <p class="center muted">Check in within 24 hours to clap back: you earn +20 and they lose 5.</p>
+    <form method="dialog" class="modal-actions"><button class="btn btn-block btn-lg">Game on</button></form>
+  </dialog>
+  <dialog class="modal sheet" data-prove-dialog aria-labelledby="prove-title">
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <div class="modal-hero"><span class="hero-icon hero-accent">{{ p.icon('zap') }}</span></div>
+    <h2 class="center display" id="prove-title">Prove It Now</h2>
+    <p class="center">Post a live photo in the next <b data-prove-countdown>2:00</b> for <b>double points</b>.</p>
+    <div class="modal-actions"><a class="btn btn-accent btn-lg" href="/prove">{{ p.icon('camera') }}Take the photo</a><form method="dialog"><button class="btn btn-secondary btn-lg">Not now</button></form></div>
+  </dialog>
+  {% if fx %}<script type="application/json" id="fx-data">{{ fx|tojson }}</script>{% endif %}
+</body>
+</html>

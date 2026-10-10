@@ -1,0 +1,423 @@
+{# Shared components and HTMX fragments. Imported "with context", so me / csrf are available. #}
+
+{% macro icon(name, cls='') %}<svg class="icon {{ cls }}" aria-hidden="true" focusable="false"><use href="#i-{{ name }}"></use></svg>{% endmacro %}
+
+{% macro csrf_field() %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endmacro %}
+
+{% macro toast(text, kind='good') %}<div class="toast toast-{{ kind }}" role="status">{{ text }}</div>{% endmacro %}
+
+{% macro progress(pct, cls='', label='') %}<div class="progress {{ cls }}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ pct|round|int }}"{% if label %} aria-label="{{ label }}"{% endif %}><span style="width: {{ [[pct, 0]|max, 100]|min }}%"></span></div>{% endmacro %}
+
+{% macro avatar(user, size=40, cls='') %}<img class="avatar {{ cls }}" src="{{ avatar_url(user) }}" alt="{{ user.username }}" width="{{ size }}" height="{{ size }}" loading="lazy">{% endmacro %}
+
+{% macro empty(icon_name, title, text, cta_url=None, cta_label=None) %}
+<div class="empty-state">
+  <span class="empty-icon">{{ icon(icon_name) }}</span>
+  <h3>{{ title }}</h3>
+  <p>{{ text }}</p>
+  {% if cta_url %}<a class="btn" href="{{ cta_url }}">{{ cta_label }}</a>{% endif %}
+</div>
+{% endmacro %}
+
+{# ------------------------------------------------------------------ top bar / HUD #}
+{% macro hud(hud, oob=False) %}
+<header id="hud" class="topbar{{ ' is-chill' if hud.chill }}" {% if oob %}hx-swap-oob="outerHTML"{% endif %}>
+  <a class="brand-mini" href="/" aria-label="Habitor home"><img src="/icon.svg?v={{ STATIC_V }}" alt="" width="32" height="32"></a>
+  <a class="level-chip" href="/u/{{ me.username }}" aria-label="Your profile — level {{ hud.level }}, {{ hud.into }} of {{ hud.span }} XP to the next level">
+    <img class="avatar" src="{{ avatar_url(me) }}" alt="" width="36" height="36">
+    <span class="level-meta">
+      <span class="level-label">Level {{ hud.level }}</span>
+      {{ progress(hud.pct, 'progress-xs') }}
+    </span>
+  </a>
+  <ul class="topbar-stats" aria-label="Your stats">
+    <li title="Coins">{{ icon('coin') }}<b>{{ hud.coins|num }}</b><span class="sr"> coins</span></li>
+    <li title="Best current streak">{{ icon('flame') }}<b>{{ hud.streak }}</b><span class="sr"> day streak</span></li>
+    <li title="Streak shields">{{ icon('shield') }}<b>{{ hud.shields }}</b><span class="sr"> shields</span></li>
+  </ul>
+  {% if hud.chill %}<span class="pill pill-info hide-sm">Chill Mode</span>{% endif %}
+  <a class="icon-btn bell" href="/notifications" aria-label="Notifications, {{ hud.unread }} unread">{{ icon('bell') }}{% if hud.unread %}<span class="count">{{ hud.unread if hud.unread < 100 else '99+' }}</span>{% endif %}</a>
+</header>
+{% endmacro %}
+
+{# ------------------------------------------------------------------ capture widgets #}
+{% macro camera(name='photo') %}
+<div class="camera" data-camera>
+  <div class="camera-stage">
+    <video class="camera-video" playsinline muted hidden></video>
+    <img class="camera-preview" alt="Your captured proof photo" hidden>
+    <div class="camera-placeholder" aria-hidden="true">{{ icon('camera', 'icon-lg') }}<span>Live camera only</span></div>
+  </div>
+  <div class="camera-actions">
+    <button type="button" class="btn btn-secondary" data-cam-start>{{ icon('camera') }}Open camera</button>
+    <button type="button" class="btn" data-cam-snap hidden>Take photo</button>
+    <button type="button" class="btn btn-ghost" data-cam-retake hidden>{{ icon('refresh') }}Retake</button>
+  </div>
+  <label class="camera-fallback" hidden>No live camera available here. Take the photo with your phone camera:
+    <input type="file" name="{{ name }}" accept="image/*" capture="environment" data-cam-input>
+  </label>
+</div>
+{% endmacro %}
+
+{# mode: checkin | reprove | friend #}
+{% macro qr_scanner(uid, mode='checkin', habit_id=None, reprove_id=None, target=None, label='Scan QR checkpoint') %}
+<div class="scanner" data-qr-scan data-mode="{{ mode }}"{% if habit_id %} data-habit="{{ habit_id }}"{% endif %}{% if reprove_id %} data-reprove="{{ reprove_id }}"{% endif %}{% if target %} data-target="{{ target }}"{% endif %}>
+  <button type="button" class="btn btn-secondary" data-qr-start>{{ icon('scan') }}<span>{{ label }}</span></button>
+  <div class="qr-reader" id="qr-reader-{{ uid }}" aria-label="Camera view for QR scanning"></div>
+  <p class="help qr-status" aria-live="polite"></p>
+</div>
+{% endmacro %}
+
+{% macro nfc_reader(mode='checkin', habit_id=None, reprove_id=None, target=None, label='Tap NFC checkpoint') %}
+<div class="nfc" data-nfc-scan data-mode="{{ mode }}"{% if habit_id %} data-habit="{{ habit_id }}"{% endif %}{% if reprove_id %} data-reprove="{{ reprove_id }}"{% endif %}{% if target %} data-target="{{ target }}"{% endif %}>
+  <button type="button" class="btn btn-secondary" data-nfc-start hidden>{{ icon('nfc') }}<span>{{ label }}</span></button>
+  <p class="help nfc-status" aria-live="polite"></p>
+  <p class="help" data-nfc-fallback>Hold the top of your phone against the tag. On iPhone and most Android phones it opens Habitor automatically to confirm.</p>
+</div>
+{% endmacro %}
+
+{% macro nfc_writer(url, label='Write to NFC tag') %}
+<div class="nfc-writer" data-nfc-write data-url="{{ url }}">
+  <button type="button" class="btn btn-secondary" data-nfc-write-start hidden>{{ icon('nfc') }}<span>{{ label }}</span></button>
+  <p class="help nfc-status" aria-live="polite"></p>
+  <p class="help" data-nfc-fallback>Writing tags from the browser works in Chrome on Android. On other devices, copy the link below into any NFC writer app (for example NFC Tools) and write it to an NTAG213/215 sticker.</p>
+</div>
+{% endmacro %}
+
+{% macro copy_field(value, label) %}
+<div class="copy-field"><input class="input" readonly value="{{ value }}" aria-label="{{ label }}" data-copy-src><button type="button" class="btn btn-secondary" data-copy>{{ icon('copy') }}Copy</button></div>
+{% endmacro %}
+
+{# ------------------------------------------------------------------ status + badges #}
+{% macro status_badge(ci) %}
+{% set s = {'pending': ('Awaiting review', 'pill-warning', 'clock'), 'verified': ('Verified', 'pill-success', 'check'), 'flagged': ('Flagged', 'pill-danger', 'alert'), 'rejected': ('Rejected', 'pill-danger', 'x')}[ci.status] %}
+<span class="pill {{ s[1] }}">{{ icon(s[2]) }}{{ s[0] }}</span>
+{% endmacro %}
+
+{% macro proof_badges(ci) %}
+{% for m in ci.methods.split(',') if m in game.PROOF_METHODS %}<span class="pill pill-neutral">{{ icon(game.PROOF_ICONS[m]) }}{{ game.PROOF_METHODS[m] }}</span>{% endfor %}
+{% if ci.ai_match %}<span class="pill pill-info">{{ icon('sparkle') }}AI verified</span>{% endif %}
+{% if ci.prove_it %}<span class="pill pill-gold">{{ icon('zap') }}Prove It Now · 2×</span>{% endif %}
+{% if ci.clapback %}<span class="pill pill-gold">{{ icon('refresh') }}Clap back</span>{% endif %}
+{% endmacro %}
+
+{# ------------------------------------------------------------------ quest cards #}
+{% macro reprove_block(ci, h, deadline_left, target) %}
+<div class="alert alert-danger reprove">
+  <div class="alert-head">{{ icon('alert') }}<div><strong>Your friends flagged this proof.</strong><p>Re-verify within <b>{{ deadline_left }}</b> or lose {{ game.REJECT_PENALTY }} points and this streak day.</p></div></div>
+  <div class="proof-tabs" role="tablist" aria-label="Re-verification method">
+    <button type="button" role="tab" class="proof-tab" data-proof-tab="rp-photo-{{ ci.id }}" aria-selected="true">{{ icon('camera') }}Photo + GPS</button>
+    {% if 'qr' in h.methods %}<button type="button" role="tab" class="proof-tab" data-proof-tab="rp-qr-{{ ci.id }}" aria-selected="false">{{ icon('qr') }}QR</button>{% endif %}
+    {% if 'nfc' in h.methods %}<button type="button" role="tab" class="proof-tab" data-proof-tab="rp-nfc-{{ ci.id }}" aria-selected="false">{{ icon('nfc') }}NFC</button>{% endif %}
+  </div>
+  <div class="proof-panel" role="tabpanel" data-proof-panel="rp-photo-{{ ci.id }}">
+    <form class="proof-form" hx-post="/checkins/{{ ci.id }}/reprove" hx-encoding="multipart/form-data" hx-target="{{ target }}" hx-swap="outerHTML" data-geo-form data-geo-required>
+      <input type="hidden" name="method" value="photo_gps">
+      <input type="hidden" name="lat"><input type="hidden" name="lon">
+      {{ camera() }}
+      <p class="help geo-status" aria-live="polite"></p>
+      <button class="btn btn-block" type="submit" data-needs-photo disabled>Submit re-verification</button>
+    </form>
+  </div>
+  {% if 'qr' in h.methods %}<div class="proof-panel" role="tabpanel" data-proof-panel="rp-qr-{{ ci.id }}" hidden>{{ qr_scanner('rp' ~ ci.id, 'reprove', h.id, ci.id, target) }}</div>{% endif %}
+  {% if 'nfc' in h.methods %}<div class="proof-panel" role="tabpanel" data-proof-panel="rp-nfc-{{ ci.id }}" hidden>{{ nfc_reader('reprove', h.id, ci.id, target) }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro trial_card(ci, h, deadline_left) %}
+<article class="card quest is-flagged" id="trial-{{ ci.id }}" aria-label="Proof under review: {{ h.name }}">
+  <header class="quest-head">
+    <span class="icon-tile" aria-hidden="true">{{ h.icon }}</span>
+    <div class="quest-title"><h3>{{ h.name }}</h3><p class="muted">Proof from {{ ci.local_date.strftime('%a %d %b') }}</p></div>
+    {{ status_badge(ci) }}
+  </header>
+  {% if ci.status == 'flagged' %}{{ reprove_block(ci, h, deadline_left, '#trial-%d' % ci.id) }}
+  {% else %}<div class="alert alert-success">{{ icon('check') }}Re-verification accepted. Your streak is safe.</div>{% endif %}
+</article>
+{% endmacro %}
+
+{% macro quest_card(q) %}
+{% set h = q.h %}{% set ci = q.ci %}
+<article class="card quest{{ ' is-done' if q.done }}{{ ' is-rest' if not q.due and not q.done }}{{ ' is-flagged' if ci and ci.status == 'flagged' }}" id="quest-{{ h.id }}" aria-labelledby="quest-title-{{ h.id }}">
+  <header class="quest-head">
+    <span class="icon-tile" aria-hidden="true">{{ h.icon }}</span>
+    <div class="quest-title">
+      <h3 id="quest-title-{{ h.id }}">{{ h.name }}</h3>
+      <p class="muted">{{ h.schedule.describe() }} · {{ game.DIFFICULTY_LABEL[h.difficulty] }}{% if q.week_count is not none %} · {{ q.week_count }}/{{ h.times_per_week }} this week{% endif %}</p>
+    </div>
+    <span class="streak" title="Current streak">{{ icon('flame') }}{{ h.current_streak }}</span>
+  </header>
+  {% if q.parent and not q.done %}<p class="stack-note">{{ icon('link') }}Stacked after {{ q.parent.icon }} {{ q.parent.name }}{% if q.parent_done %} — <b>you're up next</b>{% endif %}</p>{% endif %}
+
+  {% if q.done %}
+    <div class="quest-done">
+      <div class="done-line">{{ icon('check-circle', 'text-success') }}<strong>Completed</strong><span class="muted">{{ ci.created_at|localtime }} · +{{ ci.points }} XP{% if ci.distance_m is not none %} · {{ ci.distance_m|round|int }} m from spot{% endif %}</span></div>
+      <div class="pills">{{ status_badge(ci) }}{{ proof_badges(ci) }}</div>
+    </div>
+    {% if ci.status == 'flagged' %}
+      {{ reprove_block(ci, h, q.deadline_left, '#quest-%d' % h.id) }}
+    {% elif ci.status != 'rejected' %}
+      <div class="reflect">
+        <p class="label">How did it feel?</p>
+        <div class="choice-row" role="group" aria-label="Mood">
+          {% for m in game.MOODS %}<button type="button" class="emoji-choice{{ ' is-on' if ci.mood == loop.index }}" hx-post="/checkins/{{ ci.id }}/reflect" hx-vals='{"mood": "{{ loop.index }}"}' hx-target="#quest-{{ h.id }}" hx-swap="outerHTML" aria-pressed="{{ 'true' if ci.mood == loop.index else 'false' }}" aria-label="Mood {{ loop.index }} of {{ game.MOODS|length }}">{{ m }}</button>{% endfor %}
+          <span class="divider" aria-hidden="true"></span>
+          {% for en in game.ENERGY %}<button type="button" class="emoji-choice{{ ' is-on' if ci.energy == loop.index }}" hx-post="/checkins/{{ ci.id }}/reflect" hx-vals='{"energy": "{{ loop.index }}"}' hx-target="#quest-{{ h.id }}" hx-swap="outerHTML" aria-pressed="{{ 'true' if ci.energy == loop.index else 'false' }}" aria-label="Energy {{ loop.index }} of 3">{{ en }}</button>{% endfor %}
+        </div>
+        <form class="inline-form" hx-post="/checkins/{{ ci.id }}/reflect" hx-target="#quest-{{ h.id }}" hx-swap="outerHTML">
+          <label class="sr" for="note-{{ ci.id }}">Reflection note</label>
+          <input class="input" id="note-{{ ci.id }}" name="note" maxlength="200" value="{{ ci.note }}" placeholder="Add a short note (optional)" autocomplete="off">
+          <button class="btn btn-secondary" type="submit">Save</button>
+        </form>
+      </div>
+    {% endif %}
+    {% for n in q.next_up %}<a class="next-up" href="#quest-{{ n.id }}">{{ icon('link') }}<span>Next in your stack: <b>{{ n.icon }} {{ n.name }}</b></span>{{ icon('arrow-right') }}</a>{% endfor %}
+
+  {% elif not q.due %}
+    <p class="rest-note">{{ icon('moon') }}Rest day — this quest isn't scheduled today.</p>
+
+  {% else %}
+    {% if q.show_tiny %}<div class="alert alert-gold">{{ icon('clock') }}<span><b>Short on time?</b> Two-minute version: {{ h.tiny_version }}</span></div>{% endif %}
+    {% set methods = h.methods %}
+    <div class="proof-tabs" role="tablist" aria-label="Verification method">
+      {% for m in methods %}<button type="button" role="tab" class="proof-tab" data-proof-tab="p-{{ m }}-{{ h.id }}" aria-selected="{{ 'true' if loop.first else 'false' }}">{{ icon(game.PROOF_ICONS[m]) }}<span>{{ game.PROOF_METHODS[m] }}</span></button>{% endfor %}
+    </div>
+    {% for m in methods %}
+    <div class="proof-panel" role="tabpanel" data-proof-panel="p-{{ m }}-{{ h.id }}" {% if not loop.first %}hidden{% endif %}>
+      {% if m == 'photo' %}
+        <form class="proof-form" hx-post="/habits/{{ h.id }}/checkin" hx-encoding="multipart/form-data" hx-target="#quest-{{ h.id }}" hx-swap="outerHTML" {% if h.has_location %}data-geo-form{% endif %}>
+          <input type="hidden" name="method" value="photo">
+          <input type="hidden" name="lat"><input type="hidden" name="lon">
+          {{ camera() }}
+          {% if h.has_location %}<p class="help geo-status" aria-live="polite">At {{ h.gps_label or 'your saved spot' }}? Your location verifies the photo instantly.</p>{% endif %}
+          <button class="btn btn-block" type="submit" data-needs-photo disabled>Submit photo</button>
+        </form>
+      {% elif m == 'gps' %}
+        {% if h.has_location %}
+        <form class="proof-form" hx-post="/habits/{{ h.id }}/checkin" hx-target="#quest-{{ h.id }}" hx-swap="outerHTML" data-geo-form data-geo-required>
+          <input type="hidden" name="method" value="gps">
+          <input type="hidden" name="lat"><input type="hidden" name="lon">
+          <p class="help">Check in within {{ game.GPS_RADIUS_M }} m of <b>{{ h.gps_label or 'your saved spot' }}</b>.</p>
+          <p class="help geo-status" aria-live="polite"></p>
+          <button class="btn btn-block" type="submit">{{ icon('pin') }}Check in here</button>
+        </form>
+        {% else %}
+        <p class="help">No location saved yet. <a href="/habits/{{ h.id }}/edit#location">Set the quest location</a></p>
+        {% endif %}
+      {% elif m == 'qr' %}
+        {{ qr_scanner('q' ~ h.id, 'checkin', h.id) }}
+        <p class="help">Scan the QR checkpoint you placed where this habit happens. <a href="/habits/{{ h.id }}/qr">Print checkpoint</a></p>
+      {% elif m == 'nfc' %}
+        {{ nfc_reader('checkin', h.id) }}
+        <p class="help"><a href="/habits/{{ h.id }}/edit#checkpoints">Set up the NFC tag</a> for this quest.</p>
+      {% elif m == 'timer' %}
+        <a class="btn btn-block" href="/habits/{{ h.id }}/timer">{{ icon('timer') }}Start a {{ h.min_minutes }}-minute focus session</a>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% endif %}
+</article>
+{% endmacro %}
+
+{# ------------------------------------------------------------------ feed #}
+{% macro reactions_bar(it) %}
+<div class="reactions" id="reacts-{{ it.ci.id }}" role="group" aria-label="Reactions">
+  {% for e, n in it.reactions.items() %}
+  <button type="button" class="reaction{{ ' is-on' if e in it.my_reactions }}" hx-post="/checkins/{{ it.ci.id }}/react" hx-vals='{"emoji": "{{ e }}"}' hx-target="#reacts-{{ it.ci.id }}" hx-swap="outerHTML" aria-pressed="{{ 'true' if e in it.my_reactions else 'false' }}" aria-label="React {{ e }} ({{ n }})">{{ e }}{% if n %}<span>{{ n }}</span>{% endif %}</button>
+  {% endfor %}
+</div>
+{% endmacro %}
+
+{% macro vote_bar(it) %}
+<div class="votes" id="votes-{{ it.ci.id }}">
+  {% if it.ci.status in ('pending', 'flagged') and 'photo' in it.ci.methods %}
+    <span class="vote-tally" aria-label="{{ it.legit }} legit, {{ it.sus }} sus">{{ icon('check') }}{{ it.legit }} <span class="muted">·</span> {{ icon('alert') }}{{ it.sus }}</span>
+    {% if it.can_vote %}
+      <button type="button" class="btn btn-secondary btn-sm" hx-post="/checkins/{{ it.ci.id }}/vote" hx-vals='{"value": "legit"}' hx-target="#votes-{{ it.ci.id }}" hx-swap="outerHTML">{{ icon('check') }}Legit</button>
+      <button type="button" class="btn btn-secondary btn-sm" hx-post="/checkins/{{ it.ci.id }}/vote" hx-vals='{"value": "sus"}' hx-target="#votes-{{ it.ci.id }}" hx-swap="outerHTML">{{ icon('alert') }}Sus</button>
+    {% elif it.my_vote %}
+      <span class="pill pill-neutral">You voted {{ it.my_vote }}</span>
+    {% elif it.mine %}
+      <span class="muted small">Your friends are reviewing this proof</span>
+    {% endif %}
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% macro feed_item(it) %}
+{% if it.type == 'event' %}
+<li class="feed-event"><span class="event-icon" aria-hidden="true">{{ it.e.icon }}</span><p>{{ it.e.text }}</p><time datetime="{{ it.e.created_at.isoformat() }}Z">{{ it.e.created_at|ago }}</time></li>
+{% else %}
+{% set ci = it.ci %}
+<li class="card feed-card" id="ci-{{ ci.id }}">
+  <header class="feed-head">
+    <a href="/u/{{ it.owner.username }}" tabindex="-1" aria-hidden="true">{{ avatar(it.owner, 40) }}</a>
+    <div class="feed-who">
+      <p><a class="strong-link" href="/u/{{ it.owner.username }}">{{ it.owner.username }}</a> completed <b>{{ it.habit.icon }} {{ it.habit.name }}</b></p>
+      <p class="muted small">{{ icon('flame') }}{{ ci.streak }}-day streak · <time datetime="{{ ci.created_at.isoformat() }}Z">{{ ci.created_at|ago }}</time></p>
+    </div>
+    {{ status_badge(ci) }}
+  </header>
+  {% if ci.photo_path %}<img class="feed-photo" src="/media/{{ ci.photo_path }}" alt="Proof photo from {{ it.owner.username }} for {{ it.habit.name }}" loading="lazy">{% endif %}
+  <div class="pills">{{ proof_badges(ci) }}{% if ci.distance_m is not none %}<span class="pill pill-neutral">{{ ci.distance_m|round|int }} m from spot</span>{% endif %}{% if ci.mood %}<span class="pill pill-neutral">{{ game.MOODS[ci.mood - 1] }} mood</span>{% endif %}</div>
+  {% if ci.ai_reason and ci.ai_match is not none %}<p class="muted small">{{ icon('sparkle') }}{{ ci.ai_reason }}</p>{% endif %}
+  {% if ci.note %}<blockquote class="feed-note">{{ ci.note }}</blockquote>{% endif %}
+  <div class="feed-actions">
+    {{ reactions_bar(it) }}
+    {{ vote_bar(it) }}
+    {% if it.can_taunt %}<button type="button" class="btn btn-ghost btn-sm" hx-get="/taunt/{{ it.owner.username }}" hx-target="#modal-root">{{ icon('megaphone') }}Taunt</button>{% endif %}
+  </div>
+</li>
+{% endif %}
+{% endmacro %}
+
+{% macro feed_list(items) %}
+<ul id="feed-list" class="feed" hx-get="/feed/items" hx-trigger="every 15s" hx-swap="outerHTML" data-poll>
+  {% for it in items %}{{ feed_item(it) }}{% else %}
+  <li class="card">{{ empty('activity', 'No activity yet', 'Add friends and complete a quest — check-ins from you and your friends appear here.', '/friends', 'Find friends') }}</li>
+  {% endfor %}
+</ul>
+{% endmacro %}
+
+{# ------------------------------------------------------------------ modals #}
+{% macro taunt_modal(target, ok, reason) %}
+<dialog class="modal" data-autoshow aria-labelledby="taunt-title-{{ target.id }}">
+  <header class="modal-head"><h2 id="taunt-title-{{ target.id }}">Taunt {{ target.username }}</h2><form method="dialog"><button class="icon-btn" aria-label="Close">{{ icon('x') }}</button></form></header>
+  {% if ok %}
+  <p class="muted">Pick a preset message. If {{ target.username }} checks in within 24 hours they earn +{{ game.CLAPBACK_BONUS }} and you lose {{ game.TAUNTER_PENALTY }}.</p>
+  <div class="option-list">
+    {% for t in game.TAUNTS.values() %}
+    <button type="button" class="option" hx-post="/taunt/{{ target.username }}" hx-vals='{"key": "{{ t.key }}"}' hx-target="closest dialog" hx-swap="outerHTML"><span class="option-emoji" aria-hidden="true">{{ t.sticker }}</span><span>{{ t.text }}</span>{{ icon('arrow-right', 'option-arrow') }}</button>
+    {% endfor %}
+  </div>
+  <p class="help">{{ game.MAX_TAUNTS_PER_DAY }} taunts per day · one per player per day.</p>
+  {% else %}
+  <div class="alert alert-neutral">{{ icon('info') }}<span>{{ reason }}</span></div>
+  <form method="dialog" class="modal-actions"><button class="btn btn-secondary">Close</button></form>
+  {% endif %}
+</dialog>
+{% endmacro %}
+
+{% macro taunt_sent(target, taunt) %}
+<dialog class="modal modal-sm" data-autoshow aria-labelledby="taunt-sent-title">
+  <div class="modal-hero"><span class="hero-emoji" aria-hidden="true">{{ taunt.sticker }}</span></div>
+  <h2 id="taunt-sent-title" class="center">Taunt sent</h2>
+  <p class="center muted">“{{ taunt.text }}” is on its way to {{ target.username }}.</p>
+  <form method="dialog" class="modal-actions"><button class="btn btn-block">Done</button></form>
+</dialog>
+{% endmacro %}
+
+{# ------------------------------------------------------------------ friends #}
+{% macro friend_results(results, rel, q) %}
+<ul class="list" id="search-results">
+  {% for u in results %}
+  {% set f = rel[u.id] %}
+  <li class="list-item">
+    {{ avatar(u, 36) }}
+    <div class="grow"><a class="strong-link" href="/u/{{ u.username }}">{{ u.username }}</a><p class="muted small">Level {{ game.level_for_xp(u.xp) }}</p></div>
+    {% if f and f.status == 'accepted' %}<span class="pill pill-success">Friends</span>
+    {% elif f and f.status == 'pending' and f.requester_id == me.id %}<span class="pill pill-neutral">Requested</span>
+    {% else %}
+    <form method="post" action="/friends/request/{{ u.username }}">{{ csrf_field() }}<button class="btn btn-secondary btn-sm">{{ icon('plus') }}{{ 'Accept' if f and f.status == 'pending' else 'Add' }}</button></form>
+    {% endif %}
+  </li>
+  {% else %}
+  {% if q %}<li class="muted small">No player found for “{{ q }}”.</li>{% endif %}
+  {% endfor %}
+</ul>
+{% endmacro %}
+
+{# ------------------------------------------------------------------ data viz #}
+{% macro heatmap(cols) %}
+<div class="heatmap-wrap">
+  <div class="heatmap" role="img" aria-label="Check-in calendar for the last {{ cols|length }} weeks">
+    {% for col in cols %}<div class="hm-col">{% for c in col %}<i class="hm l{{ c.level }}{{ ' future' if c.future }}" title="{{ c.date }}: {{ c.count }} check-in{{ 's' if c.count != 1 }}"></i>{% endfor %}</div>{% endfor %}
+  </div>
+  <div class="hm-legend" aria-hidden="true">Less <i class="hm l0"></i><i class="hm l1"></i><i class="hm l2"></i><i class="hm l3"></i><i class="hm l4"></i> More</div>
+</div>
+{% endmacro %}
+
+{% macro pet_card(pet, party) %}
+<section class="card pet" aria-labelledby="pet-{{ party.id }}">
+  <div class="pet-art stage-{{ pet.stage }} mood-{{ pet.mood }}">{{ pet.svg|safe }}</div>
+  <div class="grow">
+    <p class="eyebrow">Party pet · {{ party.name }}</p>
+    <h3 id="pet-{{ party.id }}">{{ party.pet_name }}</h3>
+    <p class="muted small">{{ game.PET_STAGE_LABEL[pet.stage] }} · {{ {'happy': 'Thriving', 'okay': 'Doing fine', 'sad': 'Feeling low', 'sick': 'Unwell'}[pet.mood] }}</p>
+    <div class="meter"><span class="meter-label">Health</span>{{ progress(pet.health, 'progress-success' if pet.health >= 40 else 'progress-danger', 'Pet health') }}<span class="meter-value">{{ pet.health }}</span></div>
+    <p class="help">{{ pet.points }} party check-ins{% if pet.next %} · evolves at {{ pet.next }}{% else %} · fully evolved{% endif %}</p>
+  </div>
+</section>
+{% endmacro %}
+
+{% macro boss_card(v, compact=False) %}
+<section class="card boss{{ ' is-compact' if compact }} status-{{ v.boss.status }}" aria-labelledby="boss-{{ v.boss.id }}" data-boss>
+  <div class="boss-art" aria-hidden="true">{{ v.b.sprite }}</div>
+  <div class="grow">
+    <p class="eyebrow">Weekly boss</p>
+    <h3 id="boss-{{ v.boss.id }}">{{ v.b.name }}</h3>
+    <div class="meter"><span class="meter-label">HP</span>{{ progress(v.pct, 'progress-danger', 'Boss HP') }}<span class="meter-value">{{ v.boss.hp|num }}</span></div>
+    <p class="help">{{ v.boss.hp|num }} / {{ v.boss.hp_max|num }} HP{% if v.boss.status == 'active' %} · {% if v.last_day %}<b class="text-danger">final day</b>{% else %}{{ v.days_left }} day{{ 's' if v.days_left != 1 }} left{% endif %}{% endif %}</p>
+    {% if v.boss.status == 'defeated' %}<p class="pill pill-success">{{ icon('check') }}Defeated · +{{ game.BOSS_LOOT_COINS }} coins each</p>
+    {% elif v.boss.status == 'failed' %}<p class="text-danger small">{{ v.b.laugh }}</p>
+    {% elif not compact %}<p class="quote">“{{ v.b.taunt }}”</p>{% endif %}
+  </div>
+</section>
+{% endmacro %}
+
+{% macro template_grid() %}
+<div class="template-grid">
+  {% for key, t in game.HABIT_TEMPLATES.items() %}
+  <form method="post" action="/habits/template/{{ key }}" class="template-card">
+    {{ csrf_field() }}
+    <span class="icon-tile" aria-hidden="true">{{ t.icon }}</span>
+    <div class="grow"><h3>{{ t.title }}</h3><p class="muted small">{{ t.blurb }}</p></div>
+    <button class="btn btn-secondary btn-sm" type="submit">{{ icon('plus') }}Add</button>
+  </form>
+  {% endfor %}
+</div>
+{% endmacro %}
+
+{# ------------------------------------------------------------------ sporty widgets #}
+{# Progress ring; centre content comes from the caller block. #}
+{% macro ring(pct, size=132, stroke=12, label='') %}
+{% set r = (size - stroke) / 2 %}{% set circ = 2 * 3.14159265 * r %}{% set pct = [[pct, 0]|max, 100]|min %}
+<div class="ring" style="--ring-size: {{ size }}px" role="img" aria-label="{{ label }}">
+  <svg viewBox="0 0 {{ size }} {{ size }}" width="{{ size }}" height="{{ size }}" aria-hidden="true">
+    <circle class="ring-track" cx="{{ size / 2 }}" cy="{{ size / 2 }}" r="{{ r }}" stroke-width="{{ stroke }}"/>
+    <circle class="ring-value" cx="{{ size / 2 }}" cy="{{ size / 2 }}" r="{{ r }}" stroke-width="{{ stroke }}" stroke-dasharray="{{ '%.2f'|format(circ) }}" stroke-dashoffset="{{ '%.2f'|format(circ * (1 - pct / 100)) }}" data-ring="{{ '%.2f'|format(circ) }}" transform="rotate(-90 {{ size / 2 }} {{ size / 2 }})"/>
+  </svg>
+  <div class="ring-center">{{ caller() if caller is defined else '' }}</div>
+</div>
+{% endmacro %}
+
+{% macro quick_sheet(quests) %}
+<ul class="quick-items">
+{% for q in quests %}
+  <li><a class="quick-item{{ ' is-done' if q.done }}{{ ' is-rest' if not q.due and not q.done }}" href="/#quest-{{ q.h.id }}" data-quick-link>
+    <span class="icon-tile" aria-hidden="true">{{ q.h.icon }}</span>
+    <span class="grow"><b>{{ q.h.name }}</b>
+      <small>{% if q.done %}Done · +{{ q.ci.points }} XP{% elif not q.due %}Rest day{% else %}{% for m in q.h.methods %}{{ game.PROOF_METHODS[m] }}{{ ' · ' if not loop.last }}{% endfor %}{% endif %}</small></span>
+    {% if q.done %}<span class="done-dot">{{ icon('check') }}</span>{% elif q.due %}<span class="pill pill-accent">Check in</span>{% endif %}
+  </a></li>
+{% else %}
+  <li>{{ empty('check-circle', 'No quests yet', 'Create your first quest to start checking in.', '/habits/new', 'New quest') }}</li>
+{% endfor %}
+</ul>
+{% endmacro %}
+
+{# Theme picker: works without JS (form post sets a cookie); app.js applies it instantly. #}
+{% macro theme_switcher(variant='full') %}
+<form method="post" action="/settings/theme" class="theme-switcher theme-{{ variant }}" data-theme-form>
+  {{ csrf_field() }}
+  {% if variant == 'mini' %}<span class="nav-label">{{ icon('palette') }}Theme</span>{% endif %}
+  <div class="theme-options" role="group" aria-label="Colour theme">
+  {% for key, t in themes.items() %}
+    <button type="submit" name="theme" value="{{ key }}" class="theme-option{{ ' is-on' if key == theme }}" aria-pressed="{{ 'true' if key == theme else 'false' }}" data-theme-value="{{ key }}" data-theme-color="{{ t[2] }}" title="{{ t[0] }} — {{ t[1] }}">
+      <span class="theme-swatch" aria-hidden="true">{% for c in t[3] %}<i style="background: {{ c }}"></i>{% endfor %}</span>
+      {% if variant == 'full' %}<span class="theme-meta"><b>{{ t[0] }}</b><small>{{ t[1] }}</small></span>{% else %}<span class="sr">{{ t[0] }} theme</span>{% endif %}
+    </button>
+  {% endfor %}
+  </div>
+</form>
+{% endmacro %}

@@ -1,0 +1,31 @@
+# --- Private runtime data: never commit ---
+.habitor_secret
+*.db
+*.db-shm
+*.db-wal
+*.sqlite3
+uploads/
+.env
+.env.*
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.claude/
+.DS_Store
+Thumbs.db
+
+# --- Build artefacts / exports ---
+*.zip
+*.log

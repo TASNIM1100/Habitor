@@ -1,0 +1,16 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+sqlmodel>=0.0.22
+jinja2>=3.1
+python-multipart>=0.0.9
+itsdangerous>=2.2
+argon2-cffi>=23.1
+pillow>=10.4
+apscheduler>=3.10,<4
+httpx>=0.27
+pytest>=8.0
+# Optional extras — the app runs fine without them configured:
+pywebpush>=2.0        # Web Push (only active when VAPID_* env vars are set)
+anthropic>=1.0        # AI photo verification + coach tips (only when ANTHROPIC_API_KEY is set)
+tzdata>=2024.1        # IANA time zones on Windows and slim Docker images
+# psycopg[binary]>=3.2  # uncomment to use PostgreSQL via DATABASE_URL

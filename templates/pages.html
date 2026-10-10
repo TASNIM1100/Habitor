@@ -1,0 +1,967 @@
+{% extends "base.html" %}
+{# Every page body lives here as a macro; the content block dispatches on `page`. #}
+
+{% block title %}{{ {'home': 'Today', 'feed': 'Feed', 'boards': 'Leaderboards', 'auth': 'Sign in', 'error': 'Error', 'habits': 'My quests', 'habit_form': 'Quest', 'habit_qr': 'Checkpoint', 'qr_confirm': 'Checkpoint', 'timer': 'Focus timer', 'profile': 'Profile', 'stats': 'Insights', 'recap': 'Weekly recap', 'friends': 'Friends', 'invite_confirm': 'Connect', 'parties': 'Parties', 'party': 'Party', 'party_join': 'Join party', 'challenges': 'Compete', 'boss': 'Boss battle', 'map': 'Territory', 'prove': 'Prove It Now', 'settings': 'Settings', 'notifications': 'Notifications', 'offline': 'Offline', 'scan': 'Scan'}.get(page, 'Habitor') }} · Habitor{% endblock %}
+
+{% block content %}
+{% import "partials.html" as p with context %}
+
+{% macro page_header(title, subtitle='', eyebrow='') %}
+<header class="page-header">
+  <div>
+    {% if eyebrow %}<p class="eyebrow">{{ eyebrow }}</p>{% endif %}
+    <h1>{{ title }}</h1>
+    {% if subtitle %}<p class="subtitle">{{ subtitle }}</p>{% endif %}
+  </div>
+  <div class="page-actions">{{ caller() if caller is defined else '' }}</div>
+</header>
+{% endmacro %}
+
+{# ================================================================ auth #}
+{% macro page_auth() %}
+<section class="auth">
+  <div class="auth-hero">
+    <a class="brand brand-light" href="/"><img src="/icon.svg?v={{ STATIC_V }}" alt="" width="40" height="40"><span>Habitor</span></a>
+    <div class="auth-copy">
+      <h1>Build habits that stick — together.</h1>
+      <p>Verified check-ins, friendly accountability and a little competition. Habitor turns consistency into progress you can see.</p>
+      <ul class="feature-list">
+        <li>{{ p.icon('qr') }}<span><b>Place-based proof.</b> Scan a QR checkpoint or tap an NFC tag where the habit happens.</span></li>
+        <li>{{ p.icon('users') }}<span><b>Accountability.</b> Friends review photo proofs and keep each other on track.</span></li>
+        <li>{{ p.icon('trophy') }}<span><b>Progress you can feel.</b> Streaks, levels, leagues and weekly challenges.</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="auth-panel">
+    <div class="card auth-card">
+      <div class="segmented" role="tablist" aria-label="Account">
+        <a role="tab" href="/login" aria-selected="{{ 'true' if mode == 'login' else 'false' }}" class="seg-item{{ ' is-on' if mode == 'login' }}">Sign in</a>
+        <a role="tab" href="/signup" aria-selected="{{ 'true' if mode == 'signup' else 'false' }}" class="seg-item{{ ' is-on' if mode == 'signup' }}">Create account</a>
+      </div>
+      {% if error %}<div class="alert alert-danger" role="alert">{{ p.icon('alert') }}<span>{{ error }}</span></div>{% endif %}
+      {% if mode == 'login' %}
+      <h2>Welcome back</h2>
+      <p class="muted">Sign in to continue your streak.</p>
+      <form method="post" action="/login" class="form">
+        {{ p.csrf_field() }}
+        <input type="hidden" name="next" value="{{ next or '/' }}">
+        <label class="field"><span class="label">Username or email</span><input class="input" name="username" autocomplete="username" required autocapitalize="none" spellcheck="false"></label>
+        <label class="field"><span class="label">Password</span><input class="input" name="password" type="password" autocomplete="current-password" required></label>
+        <button class="btn btn-block btn-lg" type="submit">Sign in</button>
+      </form>
+      {% else %}
+      <h2>Create your account</h2>
+      <p class="muted">It takes less than a minute.</p>
+      <form method="post" action="/signup" class="form">
+        {{ p.csrf_field() }}
+        <label class="field"><span class="label">Username</span><input class="input" name="username" autocomplete="username" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+" autocapitalize="none" spellcheck="false" aria-describedby="uname-help"><span class="help" id="uname-help">3–20 letters, numbers or underscores.</span></label>
+        <label class="field"><span class="label">Email</span><input class="input" name="email" type="email" autocomplete="email" required maxlength="254"></label>
+        <label class="field"><span class="label">Password</span><input class="input" name="password" type="password" autocomplete="new-password" required minlength="8" maxlength="128" aria-describedby="pw-help"><span class="help" id="pw-help">At least 8 characters.</span></label>
+        <button class="btn btn-block btn-lg" type="submit">Create account</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endmacro %}
+
+{# ================================================================ home #}
+{% macro page_home() %}
+{% set done_count = quests|selectattr('done')|list|length %}
+{% set due_count = quests|selectattr('due')|list|length %}
+{% set day_pct = (100 * done_count / due_count) if due_count else 0 %}
+<section class="hero" aria-label="Today at a glance">
+  <div class="hero-copy">
+    <p class="eyebrow">{{ today.strftime('%A · %d %B') }}</p>
+    <h1 class="display">{{ 'Good morning' if hour < 12 else 'Good afternoon' if hour < 18 else 'Good evening' }}, {{ me.username }}</h1>
+    <p class="hero-sub">{% if due_count and done_count == due_count %}All quests done today. Champion form.{% elif due_count %}{{ due_count - done_count }} quest{{ 's' if due_count - done_count != 1 }} left today. Let's go.{% else %}Rest day — or add a new quest.{% endif %}</p>
+    <div class="hero-actions">
+      <button type="button" class="btn btn-accent btn-lg" data-quick-open>{{ p.icon('check') }}Check in</button>
+      <a class="btn btn-ghost-light btn-lg" href="/scan">{{ p.icon('scan') }}Scan</a>
+    </div>
+  </div>
+  {% call p.ring(day_pct, 148, 14, done_count ~ ' of ' ~ due_count ~ ' quests done today') %}<b class="ring-num" data-count="{{ done_count }}">{{ done_count }}</b><small>of {{ due_count }} done</small>{% endcall %}
+</section>
+
+<section class="stat-row" aria-label="Your numbers">
+  <div class="stat stat-streak"><span class="stat-icon">{{ p.icon('flame') }}</span><span class="stat-value" data-count="{{ hud.streak }}">{{ hud.streak }}</span><span class="stat-label">Day streak</span></div>
+  <div class="stat"><span class="stat-icon">{{ p.icon('award') }}</span><span class="stat-value">{{ hud.level }}</span><span class="stat-label">Level · {{ hud.pct }}%</span>{{ p.progress(hud.pct, 'progress-xs') }}</div>
+  <div class="stat"><span class="stat-icon">{{ p.icon('coin') }}</span><span class="stat-value" data-count="{{ hud.coins }}">{{ hud.coins|num }}</span><span class="stat-label">Coins</span></div>
+  <div class="stat"><span class="stat-icon">{{ p.icon('shield') }}</span><span class="stat-value">{{ hud.shields }}</span><span class="stat-label">Shields</span></div>
+</section>
+
+<section class="install-card" data-install-card hidden>
+  <span class="hero-icon">{{ p.icon('phone') }}</span>
+  <div class="grow"><b>Install Habitor</b><p class="help">Full-screen, faster, and right on your home screen.</p></div>
+  <button type="button" class="btn btn-accent" data-install>Install</button>
+  <button type="button" class="icon-btn" data-install-dismiss aria-label="Dismiss">{{ p.icon('x') }}</button>
+</section>
+
+{% if prove_active %}
+<a class="alert alert-gold alert-action" href="/prove" data-countdown="{{ prove_seconds }}">{{ p.icon('zap') }}<span><b>Prove It Now is live.</b> Post a live photo within <b data-countdown-text>{{ prove_seconds // 60 }}:{{ '%02d' % (prove_seconds % 60) }}</b> for double points.</span>{{ p.icon('arrow-right') }}</a>
+{% endif %}
+{% if me.chill_on %}<div class="alert alert-info">{{ p.icon('moon') }}<span>Chill Mode is on — taunts and penalties are paused. <a href="/settings">Manage</a></span></div>{% endif %}
+{% if stickers %}
+<section class="alert alert-neutral" aria-label="Taunts you received">
+  {{ p.icon('megaphone') }}
+  <div class="grow">
+    <p><b>You've been taunted.</b> Check in within 24 hours to clap back for +{{ game.CLAPBACK_BONUS }}.</p>
+    <ul class="taunt-list">{% for t, sender in stickers %}<li><span aria-hidden="true">{{ game.TAUNTS[t.key].sticker }}</span><b>{{ sender.username if sender else 'Someone' }}</b> “{{ game.TAUNTS[t.key].text }}”</li>{% endfor %}</ul>
+  </div>
+</section>
+{% endif %}
+{% if trials %}
+<section aria-labelledby="trial-title">
+  <h2 class="section-title" id="trial-title">{{ p.icon('alert') }}Needs re-verification</h2>
+  {% for ci, h, left in trials %}{{ p.trial_card(ci, h, left) }}{% endfor %}
+</section>
+{% endif %}
+
+<div class="layout-main">
+  <section aria-labelledby="quests-title">
+    <h2 class="section-title" id="quests-title">Today's quests</h2>
+    {% if quests %}
+      <div class="stack">{% for q in quests %}{{ p.quest_card(q) }}{% endfor %}</div>
+    {% else %}
+      <div class="card">
+        {{ p.empty('check-circle', 'Start with one small habit', 'Pick a ready-made plan below or create your own quest. Small and consistent beats big and occasional.') }}
+        {{ p.template_grid() }}
+        <div class="center"><a class="btn" href="/habits/new">{{ p.icon('plus') }}Create a custom quest</a></div>
+      </div>
+    {% endif %}
+  </section>
+
+  <aside class="stack" aria-label="Party and insights">
+    {% if boss %}<a href="/boss?party={{ party.id }}" class="card-link">{{ p.boss_card(boss, True) }}</a>{% endif %}
+    {% if pet %}<a href="/parties/{{ party.id }}" class="card-link">{{ p.pet_card(pet, party) }}</a>{% endif %}
+    {% for d in dares %}
+    <section class="card">
+      <p class="eyebrow">{{ p.icon('gift') }}Daily dare · {{ d.party.name }}</p>
+      <p class="lead">{{ d.dare }}</p>
+      {% if d.claimed %}<span class="pill pill-success">{{ p.icon('check') }}Completed · +{{ game.DARE_COINS }} coins</span>{% else %}<a class="btn btn-secondary btn-block" href="/parties/{{ d.party.id }}#dare">Accept dare · +{{ game.DARE_COINS }} coins</a>{% endif %}
+    </section>
+    {% endfor %}
+    {% if not party %}
+    <section class="card">{{ p.empty('flag', 'Join a party', 'Parties unlock weekly boss battles, a shared pet and daily dares.', '/parties', 'Browse parties') }}</section>
+    {% endif %}
+    {% if targets %}
+    <section class="card">
+      <h3 class="card-title">Friends falling behind</h3>
+      <p class="help">They missed a quest. A friendly nudge can help.</p>
+      <ul class="avatar-list">{% for u in targets %}<li><button type="button" class="avatar-btn" hx-get="/taunt/{{ u.username }}" hx-target="#modal-root" aria-label="Taunt {{ u.username }}">{{ p.avatar(u, 44) }}<span>{{ u.username }}</span></button></li>{% endfor %}</ul>
+    </section>
+    {% endif %}
+    <section class="card coach">
+      <p class="eyebrow">{{ p.icon('sparkle') }}{{ 'AI coach' if tip.source == 'ai' else 'Coach' }} · this week</p>
+      <p class="lead">{{ tip.text }}</p>
+      <a class="text-link" href="/stats">View insights {{ p.icon('arrow-right') }}</a>
+    </section>
+  </aside>
+</div>
+{% endmacro %}
+
+{# ================================================================ habits #}
+{% macro page_habits() %}
+{% call page_header('My quests', 'Everything you track, how often, and how it gets verified.') %}<a class="btn" href="/habits/new">{{ p.icon('plus') }}New quest</a>{% endcall %}
+{% if welcome %}<div class="alert alert-info">{{ p.icon('info') }}<span><b>Welcome to Habitor.</b> Start with one small quest — you can add more any time.</span></div>{% endif %}
+{% if habits %}
+<div class="card card-flush">
+  <ul class="list list-divided">
+    {% for h in habits %}
+    <li class="list-item">
+      <span class="icon-tile" aria-hidden="true">{{ h.icon }}</span>
+      <div class="grow">
+        <a class="strong-link" href="/habits/{{ h.id }}/edit">{{ h.name }}</a>
+        <p class="muted small">{{ h.category }} · {{ h.schedule.describe() }} · {{ game.DIFFICULTY_LABEL[h.difficulty] }}</p>
+        <div class="pills">{% for m in h.methods %}<span class="pill pill-neutral">{{ p.icon(game.PROOF_ICONS[m]) }}{{ game.PROOF_METHODS[m] }}</span>{% endfor %}</div>
+      </div>
+      <div class="list-meta"><span class="streak">{{ p.icon('flame') }}{{ h.current_streak }}</span><span class="muted small">Best {{ h.best_streak }}</span></div>
+      <a class="btn btn-secondary btn-sm" href="/habits/{{ h.id }}/edit">{{ p.icon('edit') }}Edit</a>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% else %}
+<div class="card">{{ p.empty('check-circle', 'No quests yet', 'Add a ready-made plan below or create your own.', '/habits/new', 'Create a quest') }}</div>
+{% endif %}
+<h2 class="section-title">Starter plans</h2>
+{{ p.template_grid() }}
+{% if archived %}
+<h2 class="section-title">Archived</h2>
+<div class="card card-flush"><ul class="list list-divided">{% for h in archived %}<li class="list-item"><span class="icon-tile" aria-hidden="true">{{ h.icon }}</span><span class="grow">{{ h.name }}</span>
+  <form method="post" action="/habits/{{ h.id }}/archive">{{ p.csrf_field() }}<button class="btn btn-secondary btn-sm">{{ p.icon('refresh') }}Restore</button></form></li>{% endfor %}</ul></div>
+{% endif %}
+{% endmacro %}
+
+{# ================================================================ habit form #}
+{% macro page_habit_form() %}
+{% set h = habit %}
+{% call page_header('Edit quest' if h else 'New quest', 'Define what success looks like and how it gets verified.') %}{% if h %}<a class="btn btn-secondary" href="/habits">Back to quests</a>{% endif %}{% endcall %}
+<div class="layout-form">
+<form method="post" action="{{ '/habits/%d' % h.id if h else '/habits' }}" class="card form habit-form">
+  {{ p.csrf_field() }}
+  <section class="form-section">
+    <h2 class="card-title">Details</h2>
+    <label class="field"><span class="label">Quest name</span><input class="input" name="name" required maxlength="40" value="{{ h.name if h }}" placeholder="e.g. Morning run"></label>
+    <div class="field-row">
+      <label class="field"><span class="label">Category</span>
+        <select class="input" name="category" data-category-select>
+          {% for c, ic in game.CATEGORIES.items() %}<option value="{{ c }}" data-icon="{{ ic }}" {% if h and h.category == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="field"><span class="label">Icon</span>
+        <select class="input" name="icon" data-icon-select>
+          {% for ic in game.ICON_CHOICES %}<option value="{{ ic }}" {% if (h and h.icon == ic) or (not h and ic == '⭐') %}selected{% endif %}>{{ ic }}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+  </section>
+  <section class="form-section">
+    <h2 class="card-title">Schedule</h2>
+    {% set freq = h.frequency if h else 'daily' %}
+    <div class="choice-row" role="radiogroup" aria-label="Frequency">
+      {% for k, label in game.FREQUENCIES.items() %}<label class="choice"><input type="radio" name="frequency" value="{{ k }}" {% if freq == k %}checked{% endif %} data-freq><span>{{ label }}</span></label>{% endfor %}
+    </div>
+    <label class="field" data-freq-show="weekly"><span class="label">Times per week</span><input class="input input-narrow" type="number" name="times_per_week" min="1" max="7" value="{{ h.times_per_week if h else 3 }}"></label>
+    <div class="choice-row" data-freq-show="days" role="group" aria-label="Days of the week">
+      {% set days = (h.days_csv.split(',') if h else []) %}
+      {% for d in game.WEEKDAY_SHORT %}<label class="choice"><input type="checkbox" name="days" value="{{ loop.index0 }}" {% if (loop.index0|string) in days %}checked{% endif %}><span>{{ d }}</span></label>{% endfor %}
+    </div>
+    <div class="field-row">
+      <label class="field"><span class="label">Reminder</span><input class="input" type="time" name="reminder_time" value="{{ h.reminder_time if h }}"></label>
+      <label class="field"><span class="label">Focus minutes (timer proof)</span><input class="input" type="number" name="min_minutes" min="1" max="180" value="{{ h.min_minutes if h else 10 }}"></label>
+    </div>
+  </section>
+  <section class="form-section">
+    <h2 class="card-title">Difficulty</h2>
+    <div class="choice-row" role="radiogroup" aria-label="Difficulty">
+      {% for k, label in game.DIFFICULTY_LABEL.items() %}<label class="choice"><input type="radio" name="difficulty" value="{{ k }}" {% if (h.difficulty if h else 'normal') == k %}checked{% endif %}><span>{{ label }}</span></label>{% endfor %}
+    </div>
+  </section>
+  <section class="form-section">
+    <h2 class="card-title">Verification</h2>
+    <p class="help">Any one selected method counts as proof. GPS, QR and NFC verify instantly; photos are reviewed by friends{% if AI_ENABLED %} or AI{% endif %}.</p>
+    <div class="method-grid">
+      {% for k, label in game.PROOF_METHODS.items() %}
+      <label class="method">
+        <input type="checkbox" name="proof_methods" value="{{ k }}" {% if (h and k in h.methods) or (not h and k == 'photo') %}checked{% endif %}>
+        <span class="method-body">{{ p.icon(game.PROOF_ICONS[k]) }}<b>{{ label }}</b>
+          <small>{{ {'photo': 'Live camera only, reviewed by friends', 'gps': 'Within 150 m of a saved place', 'qr': 'Scan a printed code at the location', 'nfc': 'Tap a tag placed at the location', 'timer': 'Complete a timed focus session'}[k] }}</small></span>
+      </label>
+      {% endfor %}
+    </div>
+  </section>
+  <section class="form-section">
+    <h2 class="card-title">Make it easier</h2>
+    <label class="field"><span class="label">Two-minute version</span><input class="input" name="tiny_version" maxlength="80" value="{{ h.tiny_version if h }}" placeholder="e.g. Put on running shoes"><span class="help">Suggested in the evening if you haven't checked in yet.</span></label>
+    <label class="field"><span class="label">Habit stack — do this after</span>
+      <select class="input" name="stack_after_id">
+        <option value="">No stack</option>
+        {% for o in others %}<option value="{{ o.id }}" {% if h and h.stack_after_id == o.id %}selected{% endif %}>{{ o.icon }} {{ o.name }}</option>{% endfor %}
+      </select>
+    </label>
+  </section>
+  <div class="form-actions sticky-actions"><button class="btn btn-lg btn-block-sm" type="submit">{{ 'Save changes' if h else 'Create quest' }}</button></div>
+</form>
+
+{% if h %}
+<div class="stack">
+  <section class="card" id="checkpoints" aria-labelledby="cp-title">
+    <h2 class="card-title" id="cp-title">{{ p.icon('qr') }}Verification checkpoints</h2>
+    <p class="help">Place these where the habit happens — for example at your gym's entrance or locker. Scanning the QR code or tapping the NFC tag there verifies the check-in instantly. Only you can use them.</p>
+    {% if 'qr' not in h.methods or 'nfc' not in h.methods %}<div class="alert alert-info">{{ p.icon('info') }}<span>Enable <b>QR checkpoint</b> and/or <b>NFC checkpoint</b> under Verification to use them.</span></div>{% endif %}
+    <div class="checkpoint-grid">
+      <div class="checkpoint">
+        <div class="qr-code qr-sm" data-qr-render data-text="{{ qr_url }}" role="img" aria-label="QR checkpoint for {{ h.name }}"></div>
+        <div>
+          <h3>QR code</h3>
+          <p class="help">Print it and stick it at the location.</p>
+          <a class="btn btn-secondary btn-sm" href="/habits/{{ h.id }}/qr">{{ p.icon('printer') }}Print checkpoint</a>
+        </div>
+      </div>
+      <div class="checkpoint">
+        <span class="nfc-badge" aria-hidden="true">{{ p.icon('nfc', 'icon-lg') }}</span>
+        <div class="grow">
+          <h3>NFC tag</h3>
+          {{ p.nfc_writer(nfc_url, 'Write to NFC tag') }}
+          {{ p.copy_field(nfc_url, 'NFC checkpoint link') }}
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="card" id="location" aria-labelledby="loc-title">
+    <h2 class="card-title" id="loc-title">{{ p.icon('pin') }}Location</h2>
+    <p class="help">GPS check-ins must be within {{ game.GPS_RADIUS_M }} m of this pin. Tap the map or use your current location.</p>
+    <div class="map map-picker" data-map-picker data-lat="{{ h.gps_lat if h.gps_lat is not none else '' }}" data-lon="{{ h.gps_lon if h.gps_lon is not none else '' }}" role="application" aria-label="Map: tap to set the quest location"></div>
+    <form method="post" action="/habits/{{ h.id }}/location" class="form">
+      {{ p.csrf_field() }}
+      <input type="hidden" name="lat" data-picker-lat value="{{ h.gps_lat if h.gps_lat is not none else '' }}">
+      <input type="hidden" name="lon" data-picker-lon value="{{ h.gps_lon if h.gps_lon is not none else '' }}">
+      <label class="field"><span class="label">Place name</span><input class="input" name="label" maxlength="40" value="{{ h.gps_label }}" placeholder="e.g. Downtown Fitness"></label>
+      <div class="button-row">
+        <button type="button" class="btn btn-secondary" data-locate>{{ p.icon('pin') }}Use my location</button>
+        <button type="submit" class="btn">Save location</button>
+        {% if h.has_location %}<button type="submit" name="clear" value="1" class="btn btn-ghost">Clear</button>{% endif %}
+      </div>
+    </form>
+  </section>
+  {% if 'timer' in h.methods %}<a class="btn btn-secondary btn-block" href="/habits/{{ h.id }}/timer">{{ p.icon('timer') }}Open focus timer</a>{% endif %}
+  <form method="post" action="/habits/{{ h.id }}/archive" class="card danger-zone" data-confirm="Archive {{ h.name }}? You can restore it later.">{{ p.csrf_field() }}
+    <div class="grow"><h3>Archive quest</h3><p class="help">Hides it from today's list and stops reminders. History is kept.</p></div>
+    <button class="btn btn-danger-outline">{{ p.icon('archive') }}Archive</button>
+  </form>
+</div>
+{% endif %}
+</div>
+{% endmacro %}
+
+{# ================================================================ printable checkpoint #}
+{% macro page_habit_qr() %}
+<div class="no-print">{% call page_header('Checkpoint for ' ~ habit.name, 'Print this page and place it where the habit happens.') %}<a class="btn btn-secondary" href="/habits/{{ habit.id }}/edit">Back</a>{% endcall %}</div>
+<section class="card print-sheet">
+  <div class="print-brand"><img src="/icon.svg?v={{ STATIC_V }}" alt="" width="32" height="32"><span>Habitor checkpoint</span></div>
+  <h2>{{ habit.icon }} {{ habit.name }}</h2>
+  <div class="qr-code qr-lg" data-qr-render data-text="{{ qr_url }}" role="img" aria-label="QR checkpoint for {{ habit.name }}"></div>
+  <p class="lead">Scan with your phone camera or in Habitor to check in.</p>
+  <p class="help">This code is signed and only works for its owner.</p>
+</section>
+<div class="button-row center no-print">
+  <button type="button" class="btn" data-print>{{ p.icon('printer') }}Print</button>
+  <form method="post" action="/habits/{{ habit.id }}/qr/rotate" data-confirm="Issue new codes? The current printed QR and NFC tag will stop working.">{{ p.csrf_field() }}<button class="btn btn-secondary">{{ p.icon('refresh') }}Issue new codes</button></form>
+</div>
+{% endmacro %}
+
+{# ================================================================ checkpoint landing #}
+{% macro page_qr_confirm() %}
+<section class="card narrow center">
+  <span class="hero-icon">{{ p.icon('nfc' if kind == 'nfc' else 'qr') }}</span>
+  <p class="eyebrow">{{ kind|upper }} checkpoint</p>
+  <h1>{{ habit.icon }} {{ habit.name }}</h1>
+  {% if done %}
+    <div class="alert alert-success">{{ p.icon('check') }}<span>Already completed today.</span></div>
+    <a class="btn btn-secondary" href="/">Back to today</a>
+  {% else %}
+    <p class="muted">You're at your checkpoint. Confirm to record a verified check-in.</p>
+    <form method="post" action="/{{ kind }}/checkin">{{ p.csrf_field() }}<input type="hidden" name="token" value="{{ token }}"><button class="btn btn-lg btn-block">{{ p.icon('check') }}Check in now</button></form>
+  {% endif %}
+</section>
+{% endmacro %}
+
+{# ================================================================ timer #}
+{% macro page_timer() %}
+{% set h = habit %}
+{% call page_header('Focus session', h.icon ~ ' ' ~ h.name) %}<a class="btn btn-secondary" href="/">Back</a>{% endcall %}
+<section class="card timer narrow" data-timer data-habit="{{ h.id }}" data-min="{{ h.min_minutes }}" data-proof="{{ 1 if 'timer' in h.methods else 0 }}">
+  <div class="timer-face"><span data-timer-display>{{ '%02d' % h.min_minutes }}:00</span></div>
+  {{ p.progress(0, 'progress-timer') }}
+  <p class="center muted" data-timer-status aria-live="polite">{% if 'timer' in h.methods %}Focus for {{ h.min_minutes }}+ minutes to earn a verified check-in.{% else %}Practice mode — the timer isn't a verification method for this quest.{% endif %}</p>
+  <div class="segmented center" role="group" aria-label="Session length">
+    {% for m in [h.min_minutes, 15, 25, 50]|unique %}<button type="button" class="seg-item{{ ' is-on' if loop.first }}" data-timer-preset="{{ m }}">{{ m }} min</button>{% endfor %}
+  </div>
+  <div class="button-row center">
+    <button type="button" class="btn btn-lg" data-timer-start>Start</button>
+    <button type="button" class="btn btn-lg btn-secondary" data-timer-pause hidden>Pause</button>
+    <button type="button" class="btn btn-lg btn-ghost" data-timer-reset>Reset</button>
+  </div>
+  {% if done %}<div class="alert alert-success">{{ p.icon('check') }}<span>Already checked in today — keep practising.</span></div>{% endif %}
+  <form data-timer-claim hidden hx-post="/habits/{{ h.id }}/checkin" hx-target="#timer-result" hx-swap="innerHTML">
+    <input type="hidden" name="method" value="timer">
+    <input type="hidden" name="timer_sid" data-timer-sid>
+    <button class="btn btn-lg btn-block btn-gold" type="submit">{{ p.icon('check') }}Record verified check-in</button>
+  </form>
+  <div id="timer-result"></div>
+  <dialog class="modal modal-sm" data-still-here aria-labelledby="still-title">
+    <h2 class="center" id="still-title">Still focusing?</h2>
+    <p class="center muted">Confirm within <b data-still-count>60</b> seconds or the timer pauses.</p>
+    <div class="modal-actions"><button type="button" class="btn btn-block" data-still-yes>Yes, I'm here</button></div>
+  </dialog>
+</section>
+{% endmacro %}
+
+{# ================================================================ feed #}
+{% macro page_feed() %}
+{% call page_header('Feed', 'Check-ins from you and your crew. Review photo proofs and cheer each other on.') %}<span class="live-indicator">Live</span>{% endcall %}
+{% if targets %}
+<section class="card">
+  <h3 class="card-title">Friends falling behind</h3>
+  <ul class="avatar-list">{% for u in targets %}<li><button type="button" class="avatar-btn" hx-get="/taunt/{{ u.username }}" hx-target="#modal-root" aria-label="Taunt {{ u.username }}">{{ p.avatar(u, 44) }}<span>{{ u.username }}</span></button></li>{% endfor %}</ul>
+</section>
+{% endif %}
+<div class="narrow-wide">{{ p.feed_list(items) }}</div>
+{% endmacro %}
+
+{# ================================================================ boards #}
+{% macro board_link(label, scope, period, mode, current, party=None, challenge=None) %}
+{% set url = '/boards?scope=%s&period=%s&mode=%s'|format(scope, period, mode) ~ ('&party=%d'|format(party) if party else '') ~ ('&challenge=%d'|format(challenge) if challenge else '') %}
+<a class="seg-item{{ ' is-on' if current }}" href="{{ url }}" hx-get="{{ url }}" hx-select="#board" hx-target="#board" hx-swap="outerHTML" hx-push-url="true" aria-current="{{ 'true' if current else 'false' }}">{{ label }}</a>
+{% endmacro %}
+
+{% macro page_boards() %}
+{% set b = board %}
+{% call page_header('Leaderboards', 'Weekly boards reset every Monday at 00:00 in your timezone.') %}{% endcall %}
+<section id="board" class="card">
+  <div class="board-filters">
+    <div class="segmented" aria-label="Scope">{% for k, label in scopes.items() %}{{ board_link(label|capitalize, k, b.period, b.mode, b.scope == k, b.party_id, b.challenge_id if k == 'challenge' else (challenges[0].id if k == 'challenge' and challenges else None)) }}{% endfor %}</div>
+    <div class="segmented" aria-label="Period">{% for k, label in periods.items() %}{{ board_link(label|capitalize, b.scope, k, b.mode, b.period == k, b.party_id, b.challenge_id) }}{% endfor %}</div>
+    <div class="segmented" aria-label="Ranking">{% for k, label in modes.items() %}{{ board_link(label|capitalize, b.scope, b.period, k, b.mode == k, b.party_id, b.challenge_id) }}{% endfor %}</div>
+  </div>
+  {% if b.scope == 'party' and parties|length > 1 %}<div class="segmented" aria-label="Party">{% for pt in parties %}{{ board_link(pt.name, 'party', b.period, b.mode, b.party_id == pt.id, pt.id) }}{% endfor %}</div>{% endif %}
+  {% if b.scope == 'challenge' %}
+    {% if challenges %}<div class="segmented" aria-label="Challenge">{% for c in challenges %}{{ board_link(c.name, 'challenge', b.period, b.mode, b.challenge_id == c.id, None, c.id) }}{% endfor %}</div>
+    {% else %}<div class="alert alert-neutral">{{ p.icon('info') }}<span>Join a stake challenge to see its leaderboard. <a href="/challenges">Browse challenges</a></span></div>{% endif %}
+  {% endif %}
+  {% if b.scope == 'global' and not me.global_opt_in %}<div class="alert alert-neutral">{{ p.icon('info') }}<span>You're hidden from the global leaderboard. <a href="/settings">Change in settings</a></span></div>{% endif %}
+  <table class="table board-table">
+    <thead><tr><th scope="col" class="col-rank">Rank</th><th scope="col">Player</th><th scope="col" class="hide-sm">Level</th><th scope="col" class="col-change">Change</th><th scope="col" class="num">{{ 'Consistency' if b.mode == 'consistency' else 'Points' }}</th></tr></thead>
+    <tbody>
+    {% for r in b.rows %}
+    <tr class="{{ 'is-me' if r.me }}">
+      <td class="col-rank">{% if r.rank <= 3 %}<span class="medal medal-{{ r.rank }}">{{ r.rank }}</span>{% else %}{{ r.rank }}{% endif %}</td>
+      <td><a class="player" href="/u/{{ r.user.username }}">{{ p.avatar(r.user, 32) }}<span>{{ r.user.username }}{% if r.me %} <span class="muted">(you)</span>{% endif %}</span></a></td>
+      <td class="hide-sm muted">{{ r.level }}</td>
+      <td class="col-change">{% if r.change > 0 %}<span class="delta up">{{ p.icon('arrow-up') }}{{ r.change }}</span>{% elif r.change < 0 %}<span class="delta down">{{ p.icon('arrow-down') }}{{ -r.change }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td class="num"><b>{{ r.score|num }}{{ '%' if b.mode == 'consistency' else '' }}</b></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5">{{ p.empty('trophy', 'No scores yet', 'Complete a quest to get on the board.') }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="help">Consistency = completed ÷ scheduled, so smaller goals can still win.</p>
+</section>
+
+<div class="grid-2">
+  <section class="card">
+    <h2 class="card-title">{{ p.icon('award') }}Wall of fame</h2>
+    <ul class="list list-compact">{% for w in walls.fame %}<li class="list-item"><span aria-hidden="true">{{ w.icon }}</span><span><b>{{ w.user }}</b> {{ w.text }}</span></li>{% else %}<li class="muted">No standouts yet this week.</li>{% endfor %}</ul>
+  </section>
+  <section class="card">
+    <h2 class="card-title">{{ p.icon('alert') }}Wall of shame</h2>
+    <ul class="list list-compact">{% for w in walls.shame %}<li class="list-item"><span aria-hidden="true">{{ w.icon }}</span><span><b>{{ w.user }}</b> {{ w.text }}</span></li>{% else %}<li class="muted">Spotless — everyone's on track.</li>{% endfor %}</ul>
+  </section>
+</div>
+
+{% for l in leagues %}
+<section class="card">
+  <div class="card-head"><h2 class="card-title">{{ p.icon('crown') }}{{ l.party.tier }} league · {{ l.party.name }}</h2><span class="pill pill-gold">{{ l.party.tier }}</span></div>
+  <p class="help">Monthly season. Top 20% are promoted, bottom 20% relegated. Score is average points per member.</p>
+  <table class="table">
+    <thead><tr><th scope="col" class="col-rank">Rank</th><th scope="col">Party</th><th scope="col" class="hide-sm">Members</th><th scope="col" class="col-change">Zone</th><th scope="col" class="num">Score</th></tr></thead>
+    <tbody>{% for r in l.rows %}<tr class="{{ 'is-me' if r.party.id == l.party.id }}"><td class="col-rank">{{ r.rank }}</td><td>{{ r.party.name }}</td><td class="hide-sm muted">{{ r.members }}</td><td class="col-change">{% if r.zone == 'up' %}<span class="delta up">{{ p.icon('arrow-up') }}Promote</span>{% elif r.zone == 'down' %}<span class="delta down">{{ p.icon('arrow-down') }}Relegate</span>{% else %}<span class="muted">—</span>{% endif %}</td><td class="num"><b>{{ r.score }}</b></td></tr>{% endfor %}</tbody>
+  </table>
+</section>
+{% endfor %}
+{% endmacro %}
+
+{# ================================================================ profile #}
+{% macro page_profile() %}
+<section class="card profile-head">
+  <img class="avatar avatar-xl" src="{{ avatar_url(user) }}" alt="{{ user.username }}'s avatar" width="96" height="96">
+  <div class="grow">
+    <div class="title-row"><h1>{{ user.username }}</h1>
+      {% if user.chill_on %}<span class="pill pill-info">Chill Mode</span>{% endif %}
+      {% if 'caught_cappin' in badges %}<span class="pill pill-danger">Caught Cappin'</span>{% endif %}</div>
+    <p class="muted">Level {{ prog.level }} · {{ user.xp|num }} XP</p>
+    <div class="meter"><span class="meter-label">Next level</span>{{ p.progress(prog.pct, '', 'Progress to next level') }}<span class="meter-value">{{ prog.pct }}%</span></div>
+    {% if user.bio %}<p class="bio">{{ user.bio }}</p>{% endif %}
+    <div class="button-row">
+      {% if is_me %}
+        <a class="btn btn-secondary" href="/settings">{{ p.icon('edit') }}Edit profile</a><a class="btn btn-secondary" href="/stats">{{ p.icon('chart') }}Insights</a><a class="btn btn-secondary" href="/recap">{{ p.icon('film') }}Weekly recap</a><a class="btn btn-secondary" href="/friends#friend-code">{{ p.icon('qr') }}My friend code</a>
+      {% else %}
+        {% if not friendship or friendship.status == 'declined' %}
+          <form method="post" action="/friends/request/{{ user.username }}">{{ p.csrf_field() }}<button class="btn">{{ p.icon('plus') }}Add friend</button></form>
+        {% elif friendship.status == 'pending' and friendship.addressee_id == me.id %}
+          <form method="post" action="/friends/{{ friendship.id }}/accept">{{ p.csrf_field() }}<button class="btn">{{ p.icon('check') }}Accept request</button></form>
+        {% elif friendship.status == 'pending' %}<span class="pill pill-neutral">Request sent</span>
+        {% else %}<span class="pill pill-success">{{ p.icon('check') }}Friends</span>{% endif %}
+        {% if taunt_ok %}<button type="button" class="btn btn-secondary" hx-get="/taunt/{{ user.username }}" hx-target="#modal-root">{{ p.icon('megaphone') }}Taunt</button>
+        {% elif friendship and friendship.status == 'accepted' %}<span class="help">{{ taunt_reason }}</span>{% endif %}
+        {% if friendship and friendship.status == 'accepted' %}<a class="btn btn-secondary" href="/challenges#duel">{{ p.icon('swords') }}Challenge to a duel</a>{% endif %}
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{% if stickers %}
+<div class="alert alert-neutral">{{ p.icon('megaphone') }}<span><b>Taunts waiting for a reply:</b> {% for t in stickers %}<span title="{{ game.TAUNTS[t.key].text }}">{{ game.TAUNTS[t.key].sticker }}</span>{% endfor %} — they clear on the next check-in.</span></div>
+{% endif %}
+
+{% if visible %}
+<section class="stat-row">
+  <div class="stat"><span class="stat-label">Check-ins</span><span class="stat-value">{{ stats.checkins }}</span></div>
+  <div class="stat"><span class="stat-label">Best streak</span><span class="stat-value">{{ stats.best_streak }}</span></div>
+  <div class="stat"><span class="stat-label">Coins</span><span class="stat-value">{{ user.coins|num }}</span></div>
+  <div class="stat"><span class="stat-label">Friends</span><span class="stat-value">{{ stats.friends }}</span></div>
+  <div class="stat"><span class="stat-label">Territory</span><span class="stat-value">{{ stats.tiles_owned }}<small> tiles</small></span></div>
+  <div class="stat"><span class="stat-label">Badges</span><span class="stat-value">{{ badges|length }}</span></div>
+</section>
+<section class="card"><h2 class="card-title">Activity · last 26 weeks</h2>{{ p.heatmap(heat) }}</section>
+{% if habits %}
+<section class="card card-flush"><h2 class="card-title card-pad">Active quests</h2>
+  <ul class="list list-divided">{% for h in habits %}<li class="list-item"><span class="icon-tile" aria-hidden="true">{{ h.icon }}</span><span class="grow">{{ h.name }}</span><span class="streak">{{ p.icon('flame') }}{{ h.current_streak }}</span></li>{% endfor %}</ul>
+</section>
+{% endif %}
+{% if parties %}<p class="help">Parties: {% for pt in parties if pt %}{{ pt.name }} ({{ pt.tier }}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% else %}
+<div class="alert alert-neutral">{{ p.icon('info') }}<span>Connect with {{ user.username }} to see their stats and check-ins.</span></div>
+{% endif %}
+
+<section class="card">
+  <h2 class="card-title">{{ p.icon('award') }}Badges</h2>
+  <ul class="badge-grid">
+    {% for bd in game.BADGES %}
+    {% set owned = bd.key in badges %}
+    {% if owned or not bd.temporary %}
+    <li class="badge{{ ' is-owned' if owned else ' is-locked' }}{{ ' is-temp' if bd.temporary }}" title="{{ bd.desc }}">
+      <span class="badge-icon" aria-hidden="true">{{ bd.icon }}</span>
+      <b>{{ bd.name }}</b><small>{{ bd.desc }}</small>
+      <span class="sr">{{ 'Earned' if owned else 'Locked' }}</span>
+    </li>
+    {% endif %}
+    {% endfor %}
+  </ul>
+</section>
+{% endmacro %}
+
+{# ================================================================ stats #}
+{% macro page_stats() %}
+{% call page_header('Insights', 'Patterns from your check-ins.') %}<a class="btn btn-secondary" href="/recap">{{ p.icon('film') }}Weekly recap</a>{% endcall %}
+<section class="card coach"><p class="eyebrow">{{ p.icon('sparkle') }}{{ 'AI coach' if tip.source == 'ai' else 'Coach' }} · tip of the week</p><p class="lead">{{ tip.text }}</p></section>
+<section class="card"><h2 class="card-title">Last 52 weeks</h2>{{ p.heatmap(heat) }}</section>
+<div class="grid-2">
+  <section class="card">
+    <h2 class="card-title">Completion · last 30 days</h2>
+    <ul class="list">
+      {% for r in rates %}
+      <li class="rate-row"><span class="rate-name">{{ r.habit.icon }} {{ r.habit.name }}</span>{{ p.progress(r.pct, 'progress-info') }}<b>{{ r.pct }}%</b></li>
+      {% else %}<li class="muted">No quests yet.</li>{% endfor %}
+    </ul>
+  </section>
+  <section class="card">
+    <h2 class="card-title">Best time of day</h2>
+    <div class="bar-chart" role="img" aria-label="Check-ins by time of day{% if best_hour is not none %}, peak around {{ '%02d' % best_hour }}:00{% endif %}">
+      {% for n in buckets %}<div class="bar-col"><i style="height: {{ (100 * n / peak)|round|int }}%"></i><small>{{ '%02d' % (loop.index0 * 3) }}</small></div>{% endfor %}
+    </div>
+    {% if best_hour is not none %}<p class="help">Most consistent around <b>{{ '%02d' % best_hour }}:00</b>.</p>{% endif %}
+  </section>
+  <section class="card">
+    <h2 class="card-title">Mood trend</h2>
+    {% if moods %}
+    <svg class="line-chart" viewBox="0 0 {{ [moods|length * 20, 40]|max }} 60" preserveAspectRatio="none" role="img" aria-label="Mood over your last {{ moods|length }} reflections">
+      <polyline fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" points="{% for m in moods %}{{ loop.index0 * 20 + 10 }},{{ 55 - (m.mood - 1) * 12 }} {% endfor %}" />
+    </svg>
+    <p class="mood-row">{% for m in moods %}<span title="{{ m.date }}">{{ m.emoji }}</span>{% endfor %}</p>
+    {% else %}<p class="help">Log your mood after a check-in to see trends here.</p>{% endif %}
+  </section>
+  <section class="card">
+    <h2 class="card-title">Longest streaks</h2>
+    <ol class="list list-compact">{% for h in streak_habits %}<li class="list-item"><span class="grow">{{ h.icon }} {{ h.name }}{% if h.archived %} <span class="muted">(archived)</span>{% endif %}</span><b>{{ h.best_streak }} days</b></li>{% else %}<li class="muted">—</li>{% endfor %}</ol>
+  </section>
+</div>
+{% endmacro %}
+
+{# ================================================================ recap #}
+{% macro page_recap() %}
+{% call page_header('Weekly recap', r.week_start.strftime('%d %b') ~ ' – ' ~ r.week_end.strftime('%d %b')) %}
+<div class="segmented"><a class="seg-item{{ ' is-on' if week == 'last' }}" href="/recap?week=last">Last week</a><a class="seg-item{{ ' is-on' if week != 'last' }}" href="/recap?week=this">This week</a></div>
+{% endcall %}
+<section class="recap" data-recap aria-roledescription="carousel" aria-label="Weekly recap story">
+  <div class="recap-track" data-recap-track>
+    <article class="slide" aria-roledescription="slide"><p class="eyebrow">Your week</p><img class="avatar avatar-xl" src="{{ avatar_url(me) }}" alt="" width="112" height="112"><h2>{{ me.username }}</h2><p>Level {{ r.level }}</p></article>
+    <article class="slide" aria-roledescription="slide"><p class="eyebrow">Total XP</p><p class="mega">+{{ r.xp|num }}</p><p>{{ r.checkins }} check-ins completed</p></article>
+    <article class="slide" aria-roledescription="slide"><p class="eyebrow">Top habit</p><p class="mega">{{ r.top_habit.icon if r.top_habit else '—' }}</p><p>{{ r.top_habit.name if r.top_habit else 'No check-ins yet' }}</p><p class="muted">{{ r.top_count }}× this week</p></article>
+    <article class="slide" aria-roledescription="slide"><p class="eyebrow">Best streak</p><p class="mega">{{ r.best_streak }}</p><p>days in a row</p></article>
+    <article class="slide" aria-roledescription="slide"><p class="eyebrow">Best photo</p>
+      {% if r.best_photo %}<img class="recap-photo" src="/media/{{ r.best_photo.photo_path }}" alt="Your most-reacted proof photo this week"><p>{{ r.best_photo_reacts }} reactions</p>{% else %}<p class="mega">—</p><p>No photos this week</p>{% endif %}
+    </article>
+    <article class="slide" aria-roledescription="slide"><p class="eyebrow">Rank among friends</p><p class="mega">#{{ r.rank_now }}</p><p>{% if r.rank_delta > 0 %}Up {{ r.rank_delta }}{% elif r.rank_delta < 0 %}Down {{ -r.rank_delta }}{% else %}Holding steady{% endif %} · {{ r.players }} players</p></article>
+    <article class="slide" aria-roledescription="slide"><p class="eyebrow">Friendly rivalry</p><p class="mega">{{ r.taunts_sent }}</p><p>taunts sent</p><p class="mega">{{ r.taunts_received }}</p><p>taunts received</p></article>
+    <article class="slide" aria-roledescription="slide"><p class="eyebrow">That's a wrap</p><h2>See you next week</h2><button type="button" class="btn btn-gold" data-recap-download>{{ p.icon('download') }}Download as image</button><p class="muted">1080 × 1920 · ready for stories</p></article>
+  </div>
+  <div class="recap-nav"><button type="button" class="btn btn-secondary btn-icon" data-recap-prev aria-label="Previous slide">{{ p.icon('arrow-right', 'flip') }}</button><span class="recap-dots" data-recap-dots aria-hidden="true"></span><button type="button" class="btn btn-secondary btn-icon" data-recap-next aria-label="Next slide">{{ p.icon('arrow-right') }}</button></div>
+  <script type="application/json" id="recap-data">{{ recap_json|tojson }}</script>
+</section>
+{% endmacro %}
+
+{# ================================================================ friends #}
+{% macro page_friends() %}
+{% call page_header('Friends', 'Connect in person with a QR code or NFC tag, or search by username.') %}{% endcall %}
+<div class="grid-2">
+  <section class="card" id="friend-code" aria-labelledby="fc-title">
+    <h2 class="card-title" id="fc-title">{{ p.icon('qr') }}Your friend code</h2>
+    <p class="help">Let a friend scan this code with their camera — you'll be connected instantly.</p>
+    <div class="friend-code">
+      <div class="qr-code qr-md" data-qr-render data-text="{{ invite_url }}" role="img" aria-label="Your friend code QR"></div>
+      <div class="stack-sm">
+        <img class="avatar avatar-lg" src="{{ avatar_url(me) }}" alt="" width="56" height="56">
+        <b>{{ me.username }}</b>
+        <span class="muted small">Level {{ hud.level }}</span>
+      </div>
+    </div>
+    {{ p.copy_field(invite_url, 'Your friend link') }}
+    <div class="button-row"><button type="button" class="btn btn-secondary" data-share data-share-url="{{ invite_url }}" hidden>{{ p.icon('share') }}Share link</button></div>
+    <details class="disclosure">
+      <summary>{{ p.icon('nfc') }}Put your friend code on an NFC tag</summary>
+      <p class="help">Write your code to an NFC sticker (on your keys, phone case or desk). Friends tap it with their phone to connect.</p>
+      {{ p.nfc_writer(invite_url, 'Write my code to a tag') }}
+    </details>
+  </section>
+  <section class="card" aria-labelledby="add-title">
+    <h2 class="card-title" id="add-title">{{ p.icon('plus') }}Add a friend</h2>
+    <div class="stack">
+      {{ p.qr_scanner('friend', 'friend', None, None, None, "Scan a friend's code") }}
+      {{ p.nfc_reader('friend', None, None, None, "Tap a friend's NFC tag") }}
+      <label class="field"><span class="label">Search by username</span>
+        <span class="input-icon">{{ p.icon('search') }}<input class="input" type="search" name="q" placeholder="Start typing a username" autocomplete="off" autocapitalize="none" hx-get="/friends/search" hx-trigger="input changed delay:300ms, search" hx-target="#search-results" hx-swap="outerHTML"></span></label>
+      <ul class="list" id="search-results"></ul>
+    </div>
+  </section>
+</div>
+{% if incoming %}
+<section class="card card-flush"><h2 class="card-title card-pad">Friend requests</h2>
+  <ul class="list list-divided">{% for f in incoming %}{% set u = others[f.requester_id] %}
+    <li class="list-item">{{ p.avatar(u, 36) }}<a class="strong-link grow" href="/u/{{ u.username }}">{{ u.username }}</a>
+      <form method="post" action="/friends/{{ f.id }}/accept">{{ p.csrf_field() }}<button class="btn btn-sm">{{ p.icon('check') }}Accept</button></form>
+      <form method="post" action="/friends/{{ f.id }}/decline">{{ p.csrf_field() }}<button class="btn btn-secondary btn-sm">Decline</button></form>
+    </li>{% endfor %}</ul>
+</section>
+{% endif %}
+<section class="card card-flush"><h2 class="card-title card-pad">Your friends <span class="muted">({{ friends|length }})</span></h2>
+  <ul class="list list-divided">
+    {% for u in friends %}
+    <li class="list-item">{{ p.avatar(u, 36) }}<div class="grow"><a class="strong-link" href="/u/{{ u.username }}">{{ u.username }}</a><p class="muted small">Level {{ game.level_for_xp(u.xp) }}</p></div>
+      {% if taunts[u.id] %}<button type="button" class="btn btn-secondary btn-sm" hx-get="/taunt/{{ u.username }}" hx-target="#modal-root">{{ p.icon('megaphone') }}Taunt</button>{% endif %}
+      <form method="post" action="/friends/remove/{{ u.username }}" data-confirm="Remove {{ u.username }} from your friends?">{{ p.csrf_field() }}<button class="btn btn-ghost btn-sm" aria-label="Remove {{ u.username }}">{{ p.icon('x') }}</button></form>
+    </li>
+    {% else %}
+    <li>{{ p.empty('users', 'No friends yet', 'Share your friend code or scan a friend\'s code to connect.') }}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% if outgoing %}<p class="help">Pending requests: {% for f in outgoing %}{{ others[f.addressee_id].username }}{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% endmacro %}
+
+{% macro page_invite_confirm() %}
+<section class="card narrow center">
+  <img class="avatar avatar-xl" src="{{ avatar_url(inviter) }}" alt="" width="96" height="96">
+  <p class="eyebrow">Friend code</p>
+  <h1>{{ inviter.username }}</h1>
+  <p class="muted">Level {{ game.level_for_xp(inviter.xp) }}</p>
+  {% if already %}
+    <div class="alert alert-success">{{ p.icon('check') }}<span>You're already friends.</span></div>
+    <a class="btn btn-secondary" href="/u/{{ inviter.username }}">View profile</a>
+  {% else %}
+    <p>Connect with {{ inviter.username }} to review each other's check-ins, compete on leaderboards and start challenges.</p>
+    <form method="post" action="/friends/connect">{{ p.csrf_field() }}<input type="hidden" name="code" value="{{ inviter.invite_code }}"><button class="btn btn-lg btn-block">{{ p.icon('users') }}Connect</button></form>
+  {% endif %}
+</section>
+{% endmacro %}
+
+{# ================================================================ parties #}
+{% macro page_parties() %}
+{% call page_header('Parties', 'Small groups that share a weekly boss, a pet, daily dares and a league.') %}{% endcall %}
+{% if parties %}
+<div class="card card-flush"><ul class="list list-divided">
+  {% for pt in parties %}
+  <li class="list-item"><span class="icon-tile">{{ p.icon('flag') }}</span><div class="grow"><a class="strong-link" href="/parties/{{ pt.id }}">{{ pt.name }}</a><p class="muted small">{{ sizes[pt.id] }}/20 members · {{ pt.tier }} league</p></div><a class="btn btn-secondary btn-sm" href="/parties/{{ pt.id }}">Open</a></li>
+  {% endfor %}
+</ul></div>
+{% else %}
+<div class="card">{{ p.empty('flag', 'You\'re not in a party yet', 'Create one for your friends, or join with an invite code.') }}</div>
+{% endif %}
+<div class="grid-2">
+  <form method="post" action="/parties" class="card form">{{ p.csrf_field() }}<h2 class="card-title">Create a party</h2><label class="field"><span class="label">Party name</span><input class="input" name="name" required minlength="3" maxlength="30"></label><button class="btn btn-block">Create party</button></form>
+  <form method="post" action="/parties/join" class="card form">{{ p.csrf_field() }}<h2 class="card-title">Join with a code</h2><label class="field"><span class="label">Invite code</span><input class="input" name="code" required maxlength="20" autocapitalize="none"></label><button class="btn btn-secondary btn-block">Join party</button></form>
+</div>
+{% endmacro %}
+
+{% macro page_party_join() %}
+<section class="card narrow center">
+  <span class="hero-icon">{{ p.icon('flag') }}</span>
+  <p class="eyebrow">Party invitation</p>
+  <h1>{{ party.name }}</h1>
+  <p class="muted">{{ size }}/20 members · {{ party.tier }} league</p>
+  {% if member %}<a class="btn btn-lg" href="/parties/{{ party.id }}">Open party</a>
+  {% else %}<form method="post" action="/parties/join">{{ p.csrf_field() }}<input type="hidden" name="code" value="{{ party.invite_code }}"><button class="btn btn-lg btn-block">Join party</button></form>{% endif %}
+</section>
+{% endmacro %}
+
+{% macro page_party() %}
+{% call page_header(party.name, party.tier ~ ' league · ' ~ members|length ~ ' members', 'Party') %}<a class="btn btn-secondary" href="/parties">All parties</a>{% endcall %}
+<div class="layout-main">
+  <div class="stack">
+    {{ p.boss_card(boss) }}
+    <section class="card" id="dare" aria-labelledby="dare-title">
+      <p class="eyebrow">{{ p.icon('gift') }}Daily dare</p>
+      <h2 class="card-title" id="dare-title">{{ dare }}</h2>
+      {% if me.id in claims %}<span class="pill pill-success">{{ p.icon('check') }}Completed · +{{ game.DARE_COINS }} coins</span>
+      {% else %}
+      <form method="post" action="/parties/{{ party.id }}/dare" enctype="multipart/form-data" class="proof-form">{{ p.csrf_field() }}{{ p.camera() }}<button class="btn btn-block" type="submit" data-needs-photo disabled>Complete dare · +{{ game.DARE_COINS }} coins</button></form>
+      {% endif %}
+      {% if claims %}<p class="help">Done today: {% for uid, c in claims.items() %}{% for m in members if m.id == uid %}{{ m.username }}{% endfor %}{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+    </section>
+    <section class="card card-flush"><h2 class="card-title card-pad">Members</h2>
+      <table class="table"><thead><tr><th scope="col" class="col-rank">#</th><th scope="col">Player</th><th scope="col" class="hide-sm">Level</th><th scope="col" class="num">This week</th></tr></thead>
+      <tbody>{% for m in members %}<tr class="{{ 'is-me' if m.id == me.id }}"><td class="col-rank">{{ loop.index }}</td><td><a class="player" href="/u/{{ m.username }}">{{ p.avatar(m, 32) }}<span>{{ m.username }}{% if m.id == party.owner_id %} <span class="pill pill-gold">Owner</span>{% endif %}</span></a></td><td class="hide-sm muted">{{ game.level_for_xp(m.xp) }}</td><td class="num"><b>{{ week[m.id] }}</b> pts</td></tr>{% endfor %}</tbody></table>
+    </section>
+  </div>
+  <aside class="stack">
+    {{ p.pet_card(pet, party) }}
+    <form method="post" action="/parties/{{ party.id }}/rename-pet" class="card form">{{ p.csrf_field() }}<label class="field"><span class="label">Pet name</span><span class="inline-form"><input class="input" name="name" maxlength="16" value="{{ party.pet_name }}"><button class="btn btn-secondary">Rename</button></span></label></form>
+    <section class="card">
+      <h3 class="card-title">{{ p.icon('link') }}Invite members</h3>
+      {{ p.copy_field(join_url, 'Party invite link') }}
+      <p class="help">Invite code: <b>{{ party.invite_code }}</b></p>
+    </section>
+    <section class="card card-flush">
+      <h3 class="card-title card-pad">{{ p.icon('crown') }}{{ party.tier }} league</h3>
+      <table class="table"><tbody>{% for r in league %}<tr class="{{ 'is-me' if r.party.id == party.id }}"><td class="col-rank">{{ r.rank }}</td><td>{{ r.party.name }}</td><td class="col-change">{% if r.zone == 'up' %}<span class="delta up">{{ p.icon('arrow-up') }}</span>{% elif r.zone == 'down' %}<span class="delta down">{{ p.icon('arrow-down') }}</span>{% endif %}</td><td class="num"><b>{{ r.score }}</b></td></tr>{% endfor %}</tbody></table>
+    </section>
+    <form method="post" action="/parties/{{ party.id }}/leave" data-confirm="Leave {{ party.name }}?">{{ p.csrf_field() }}<button class="btn btn-danger-outline btn-block">Leave party</button></form>
+  </aside>
+</div>
+{% endmacro %}
+
+{# ================================================================ challenges #}
+{% macro page_challenges() %}
+{% call page_header('Compete', 'Duels, stake challenges, leagues and your party\'s weekly boss.') %}{% endcall %}
+<nav class="hub-grid" aria-label="Compete">
+  <a class="hub-tile" href="/boards">{{ p.icon('trophy') }}<b>Leaderboards</b><small>Friends, party, global</small></a>
+  <a class="hub-tile" href="/boss">{{ p.icon('skull') }}<b>Boss battle</b><small>Weekly party fight</small></a>
+  <a class="hub-tile" href="/map">{{ p.icon('map') }}<b>Territory</b><small>Claim your turf</small></a>
+  <a class="hub-tile" href="/parties">{{ p.icon('flag') }}<b>Parties</b><small>Pet, dares, league</small></a>
+</nav>
+<section class="card" id="duel" aria-labelledby="duels-title">
+  <h2 class="card-title" id="duels-title">{{ p.icon('swords') }}Streak duels</h2>
+  <p class="help">One-on-one over a set number of days. The longest daily check-in run wins, and the loser completes a dare chosen by the winner.</p>
+  {% if friends %}
+  <form method="post" action="/duels" class="form-inline">{{ p.csrf_field() }}
+    <label class="field"><span class="label">Opponent</span><select class="input" name="opponent">{% for f in friends %}<option value="{{ f.username }}">{{ f.username }}</option>{% endfor %}</select></label>
+    <label class="field"><span class="label">Days</span><input class="input input-narrow" type="number" name="days" min="3" max="30" value="7"></label>
+    <button class="btn">Send challenge</button>
+  </form>
+  {% endif %}
+  <ul class="list">
+    {% for row in duels %}{% set d = row.d %}
+    <li class="duel">
+      <div class="duel-vs">{{ p.avatar(row.a, 36) }}<b>{{ row.a.username }}</b><span class="vs">vs</span><b>{{ row.b.username }}</b>{{ p.avatar(row.b, 36) }}
+        <span class="pill {{ {'pending': 'pill-warning', 'active': 'pill-info', 'finished': 'pill-success', 'declined': 'pill-neutral'}[d.status] }}">{{ d.status|capitalize }}</span></div>
+      {% if d.status == 'pending' %}
+        <p class="help">{{ d.days }}-day duel · waiting for {{ row.b.username }}</p>
+        {% if d.opponent_id == me.id %}<div class="button-row">
+          <form method="post" action="/duels/{{ d.id }}/respond">{{ p.csrf_field() }}<input type="hidden" name="accept" value="1"><button class="btn btn-sm">Accept</button></form>
+          <form method="post" action="/duels/{{ d.id }}/respond">{{ p.csrf_field() }}<input type="hidden" name="accept" value="0"><button class="btn btn-secondary btn-sm">Decline</button></form></div>{% endif %}
+      {% elif d.status == 'active' %}
+        <p class="help">Current runs: <b>{{ row.runs[0] }}</b> vs <b>{{ row.runs[1] }}</b> days · ends {{ d.end_date.strftime('%a %d %b') }}</p>
+      {% elif d.status == 'finished' %}
+        {% set winner = row.a if d.winner_id == d.challenger_id else row.b if d.winner_id else None %}
+        <p class="help">{{ (winner.username ~ ' won') if winner else 'Draw' }} · {{ row.runs[0] }} vs {{ row.runs[1] }} days</p>
+        {% if d.winner_id == me.id and not d.dare_key %}
+          <form method="post" action="/duels/{{ d.id }}/dare" class="form-inline">{{ p.csrf_field() }}<label class="field"><span class="label">Choose the loser's dare</span><select class="input" name="dare">{% for k, t in game.DUEL_DARES.items() %}<option value="{{ k }}">{{ t }}</option>{% endfor %}</select></label><button class="btn btn-sm">Assign dare</button></form>
+        {% elif d.dare_key %}
+          <p>Dare: {{ game.DUEL_DARES[d.dare_key] }} {% if d.dare_done %}<span class="pill pill-success">Done</span>{% else %}<span class="pill pill-warning">Pending</span>{% endif %}</p>
+          {% if d.winner_id and d.winner_id != me.id and not d.dare_done %}<form method="post" action="/duels/{{ d.id }}/dare-done">{{ p.csrf_field() }}<button class="btn btn-secondary btn-sm">Mark dare as done</button></form>{% endif %}
+        {% endif %}
+      {% endif %}
+    </li>
+    {% else %}<li class="muted">No duels yet. Challenge a friend to get started.</li>{% endfor %}
+  </ul>
+</section>
+
+<section class="card" aria-labelledby="pots-title">
+  <h2 class="card-title" id="pots-title">{{ p.icon('coin') }}Stake challenges</h2>
+  <p class="help">Stake <b>virtual coins only</b> — never real money. Everyone who hits the required check-ins splits the pot. If nobody finishes, stakes are refunded.</p>
+  {% if parties %}
+  <form method="post" action="/challenges" class="form-inline">{{ p.csrf_field() }}
+    <label class="field"><span class="label">Party</span><select class="input" name="party_id">{% for pt in parties %}<option value="{{ pt.id }}">{{ pt.name }}</option>{% endfor %}</select></label>
+    <label class="field"><span class="label">Name</span><input class="input" name="name" required minlength="3" maxlength="40" placeholder="Focus week"></label>
+    <label class="field"><span class="label">Days</span><input class="input input-narrow" type="number" name="days" min="3" max="30" value="7"></label>
+    <label class="field"><span class="label">Check-ins needed</span><input class="input input-narrow" type="number" name="required" min="1" max="30" value="5"></label>
+    <label class="field"><span class="label">Stake (coins)</span><input class="input input-narrow" type="number" name="stake" min="0" max="1000" value="50"></label>
+    <button class="btn">Create challenge</button>
+  </form>
+  {% else %}<p class="help"><a href="/parties">Join a party</a> to create a stake challenge.</p>{% endif %}
+  <ul class="list">
+    {% for row in challenges %}{% set c = row.c %}
+    <li class="pot">
+      <div class="pot-head"><b>{{ c.name }}</b><span class="pill pill-gold">{{ p.icon('coin') }}{{ c.pot }} pot</span><span class="pill pill-neutral">{{ c.status|capitalize }}</span><span class="help">{{ row.party.name if row.party }} · {{ c.start_date.strftime('%d %b') }}–{{ c.end_date.strftime('%d %b') }} · {{ c.required }} check-ins</span></div>
+      <ul class="pot-members">{% for m in row.members %}<li>{{ p.avatar(m.u, 28) }}<span>{{ m.u.username }}</span>{{ p.progress(100 * m.progress / c.required if c.required else 0, 'progress-xs progress-success') }}<b>{{ m.progress }}/{{ c.required }}</b>{% if c.status == 'settled' %}<span class="muted">→ {{ m.m.payout }}</span>{% endif %}</li>{% endfor %}</ul>
+      <div class="button-row">
+        {% if not row.joined and c.status == 'open' and today < c.start_date %}<form method="post" action="/challenges/{{ c.id }}/join">{{ p.csrf_field() }}<button class="btn btn-sm">Join · stake {{ c.stake }} coins</button></form>{% endif %}
+        {% if row.joined %}<a class="btn btn-secondary btn-sm" href="/boards?scope=challenge&challenge={{ c.id }}&period=all">{{ p.icon('trophy') }}Leaderboard</a>{% endif %}
+      </div>
+    </li>
+    {% else %}<li class="muted">No stake challenges yet.</li>{% endfor %}
+  </ul>
+</section>
+{% endmacro %}
+
+{# ================================================================ boss #}
+{% macro page_boss() %}
+{% call page_header('Boss battle', 'Every check-in by a party member deals damage. Defeat the boss by Sunday for +' ~ game.BOSS_LOOT_COINS ~ ' coins each.') %}{% endcall %}
+{% if v %}
+  {% if parties|length > 1 %}<div class="segmented">{% for pt in parties %}<a class="seg-item{{ ' is-on' if pt.id == party.id }}" href="/boss?party={{ pt.id }}">{{ pt.name }}</a>{% endfor %}</div>{% endif %}
+  <div class="boss-arena">{{ p.boss_card(v) }}</div>
+  <div class="grid-2">
+    <section class="card card-flush"><h2 class="card-title card-pad">Recent hits</h2>
+      <ul class="list list-divided">{% for h in v.hits %}<li class="list-item">{% if h.user %}{{ p.avatar(h.user, 28) }}<b class="grow">{{ h.user.username }}</b>{% endif %}<span class="text-danger">−{{ h.damage }} HP</span><time class="muted small">{{ h.at|ago }}</time></li>{% else %}<li class="list-item muted">No hits yet — check in to attack.</li>{% endfor %}</ul>
+    </section>
+    <section class="card card-flush"><h2 class="card-title card-pad">Top damage</h2>
+      <table class="table"><tbody>{% for t in v.top %}<tr><td class="col-rank">{% if loop.index <= 3 %}<span class="medal medal-{{ loop.index }}">{{ loop.index }}</span>{% else %}{{ loop.index }}{% endif %}</td><td>{% if t.user %}<span class="player">{{ p.avatar(t.user, 28) }}<span>{{ t.user.username }}</span></span>{% endif %}</td><td class="num"><b>{{ t.damage }}</b></td></tr>{% endfor %}</tbody></table>
+    </section>
+  </div>
+  {% if history %}
+  <section class="card card-flush"><h2 class="card-title card-pad">Past battles</h2><ul class="list list-divided">{% for bb in history %}{% set bs = game.BOSS_MAP[bb.boss_key] %}<li class="list-item"><span aria-hidden="true">{{ bs.sprite }}</span><span class="grow">{{ bs.name }} · week of {{ bb.week_start.strftime('%d %b') }}</span>{% if bb.status == 'defeated' %}<span class="pill pill-success">Victory</span>{% else %}<span class="pill pill-danger">Survived</span>{% endif %}</li>{% endfor %}</ul></section>
+  {% endif %}
+{% else %}
+  <div class="card">{{ p.empty('skull', 'Bosses only challenge parties', 'Create or join a party to start the weekly boss battle.', '/parties', 'Go to parties') }}</div>
+{% endif %}
+{% endmacro %}
+
+{# ================================================================ map #}
+{% macro page_map() %}
+{% call page_header('Territory', 'Each GPS-verified check-in claims a ~500 m tile. Friends take tiles by checking in there more often.') %}<span class="pill pill-success">{{ owned }} tile{{ 's' if owned != 1 }} owned</span>{% endcall %}
+<div class="card card-flush"><div class="map conquest-map" data-conquest-map data-src="/map/tiles.json" data-me="{{ me.username }}" role="application" aria-label="Territory map"></div></div>
+<p class="legend"><span class="swatch-dot sw-me"></span>Your tiles <span class="swatch-dot sw-friend"></span>Friends' tiles (their colour)</p>
+{% endmacro %}
+
+{# ================================================================ prove it #}
+{% macro page_prove() %}
+{% call page_header('Prove It Now', 'Once a day, at a random time, you get two minutes to post a live photo for double points.') %}{% endcall %}
+{% if active %}
+  <div class="alert alert-gold" data-countdown="{{ seconds }}">{{ p.icon('zap') }}<span><b data-countdown-text>{{ seconds // 60 }}:{{ '%02d' % (seconds % 60) }}</b> remaining · live photo earns 2× points</span></div>
+  {% if habits %}
+  <form class="card form proof-form narrow" method="post" data-prove-form enctype="multipart/form-data" action="/habits/{{ habits[0].id }}/checkin">
+    {{ p.csrf_field() }}
+    <input type="hidden" name="method" value="photo"><input type="hidden" name="prove_it" value="1">
+    <label class="field"><span class="label">Quest</span><select class="input" data-prove-habit>{% for h in habits %}<option value="{{ h.id }}">{{ h.icon }} {{ h.name }}</option>{% endfor %}</select></label>
+    {{ p.camera() }}
+    <button class="btn btn-lg btn-block btn-gold" type="submit" data-needs-photo disabled>{{ p.icon('zap') }}Submit for 2× points</button>
+  </form>
+  {% else %}<div class="card">{{ p.empty('check-circle', 'All photo quests are done', 'Nothing left to prove today — nice work.') }}</div>{% endif %}
+{% else %}
+  <div class="card">{{ p.empty('zap', 'No active alert', 'You\'ll get a notification when Prove It Now starts — sometime between 09:00 and 21:00.') }}</div>
+{% endif %}
+{% endmacro %}
+
+{# ================================================================ settings #}
+{% macro page_settings() %}
+{% call page_header('Settings', 'Profile, preferences and notifications.') %}{% endcall %}
+<div class="layout-form">
+<form method="post" action="/settings" class="card form">
+  {{ p.csrf_field() }}
+  <h2 class="card-title">Profile</h2>
+  <div class="profile-preview"><img class="avatar avatar-xl" src="{{ avatar_url(me) }}" alt="Your avatar" width="88" height="88"><p class="help">Your avatar pattern is generated from your username. Choose a colour and a frame — more frames unlock as you level up.</p></div>
+  <fieldset class="field"><legend class="label">Colour</legend>
+    <div class="swatches">{% for c in game.AVATAR_COLORS %}<label class="swatch" style="--sw: {{ c }}"><input type="radio" name="avatar_color" value="{{ c }}" {% if game.matte_color(me.avatar_color) == c %}checked{% endif %}><span class="sr">Colour {{ c }}</span></label>{% endfor %}</div>
+  </fieldset>
+  <fieldset class="field"><legend class="label">Frame <span class="muted">· you're level {{ level }}</span></legend>
+    <div class="choice-row">{% for h in game.HATS %}{% set ok = level >= h.level %}<label class="choice{{ ' is-locked' if not ok }}"><input type="radio" name="avatar_hat" value="{{ h.key }}" {% if me.avatar_hat == h.key %}checked{% endif %} {% if not ok %}disabled{% endif %}><span>{{ h.name }}{% if not ok %} · Lv {{ h.level }}{% endif %}</span></label>{% endfor %}</div>
+  </fieldset>
+  <label class="field"><span class="label">Bio</span><textarea class="input" name="bio" maxlength="160" rows="2">{{ me.bio }}</textarea></label>
+  <label class="field"><span class="label">Timezone</span>
+    <select class="input" name="tz">{% for z in timezones %}<option {% if z == me.tz %}selected{% endif %}>{{ z }}</option>{% endfor %}</select>
+    <span class="help">Used for daily resets, reminders and the Monday 00:00 weekly reset.</span>
+  </label>
+  <label class="check"><input type="checkbox" name="global_opt_in" value="1" {% if me.global_opt_in %}checked{% endif %}><span>Show me on the global leaderboard</span></label>
+  <div class="form-actions"><button class="btn btn-lg">Save changes</button></div>
+</form>
+
+<div class="stack">
+  <section class="card">
+    <h2 class="card-title">{{ p.icon('palette') }}Theme</h2>
+    <p class="help">Pick your colours. Changes apply instantly on this device.</p>
+    {{ p.theme_switcher('full') }}
+  </section>
+  <section class="card">
+    <h2 class="card-title">{{ p.icon('vibrate') }}Feedback</h2>
+    <div class="toggle-list">
+      <label class="toggle"><span><b>Vibration</b><small>Short haptic taps on check-ins and buttons (Android).</small></span><input type="checkbox" role="switch" data-pref="haptics"><i aria-hidden="true"></i></label>
+      <label class="toggle"><span><b>Sound effects</b><small>Subtle sounds for check-ins and level-ups.</small></span><input type="checkbox" role="switch" data-pref="sound"><i aria-hidden="true"></i></label>
+    </div>
+  </section>
+  <section class="card">
+    <h2 class="card-title">{{ p.icon('moon') }}Chill Mode</h2>
+    <p class="help">Pauses taunts and penalties — missed days won't break streaks. Up to 14 days per month. Used this month: <b>{{ me.chill_days_used }}/14</b>.</p>
+    <form method="post" action="/settings/chill">{{ p.csrf_field() }}<button class="btn {{ 'btn-secondary' if not me.chill_on else 'btn-danger-outline' }}">{{ 'Turn on Chill Mode' if not me.chill_on else 'Turn off Chill Mode' }}</button></form>
+  </section>
+  <section class="card">
+    <h2 class="card-title">{{ p.icon('bell') }}Notifications & app</h2>
+    {% if push_enabled %}<button type="button" class="btn btn-secondary" data-push-subscribe>{{ p.icon('bell') }}Enable push notifications</button>
+    {% else %}<p class="help">In-app notifications are on. Push notifications need VAPID keys on the server.</p>{% endif %}
+    <div class="button-row">
+      <button type="button" class="btn btn-secondary" data-install hidden>{{ p.icon('phone') }}Install app</button>
+    </div>
+    <p class="help">On iPhone: Share → Add to Home Screen. On Android: menu → Install app.</p>
+  </section>
+  <section class="card">
+    <h2 class="card-title">{{ p.icon('link') }}Your friend link</h2>
+    {{ p.copy_field(invite_url, 'Your friend link') }}
+    <a class="text-link" href="/friends#friend-code">Show QR code and NFC options {{ p.icon('arrow-right') }}</a>
+  </section>
+  <form method="post" action="/logout" class="card danger-zone">{{ p.csrf_field() }}<div class="grow"><h3>Sign out</h3><p class="help">You can sign back in any time.</p></div><button class="btn btn-danger-outline">{{ p.icon('logout') }}Sign out</button></form>
+</div>
+</div>
+{% endmacro %}
+
+{# ================================================================ notifications #}
+{% macro page_notifications() %}
+{% call page_header('Notifications') %}{% endcall %}
+<div class="card card-flush">
+  <ul class="list list-divided">
+    {% for n in items %}
+    <li class="list-item notif{{ ' is-unread' if n.id in unread_ids }}"><span class="dot" aria-hidden="true"></span><a class="grow" href="{{ n.link }}">{{ n.text }}</a><time class="muted small">{{ n.created_at|ago }}</time></li>
+    {% else %}
+    <li>{{ p.empty('bell', 'You\'re all caught up', 'Taunts, votes, friend requests and challenge updates will appear here.') }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endmacro %}
+
+{# ================================================================ universal scanner #}
+{% macro page_scan() %}
+{% call page_header('Scan', 'Scan a quest checkpoint or a friend code — Habitor works out the rest.') %}{% endcall %}
+<div class="grid-2">
+  <section class="card scan-card" aria-labelledby="scan-qr-title">
+    <h2 class="card-title" id="scan-qr-title">{{ p.icon('qr') }}QR code</h2>
+    <p class="help">Point your camera at a checkpoint printed at your gym, desk or court — or at a friend's code.</p>
+    {{ p.qr_scanner('universal', 'auto', None, None, None, 'Start camera') }}
+  </section>
+  <section class="card scan-card" id="nfc" aria-labelledby="scan-nfc-title">
+    <h2 class="card-title" id="scan-nfc-title">{{ p.icon('nfc') }}NFC tag</h2>
+    <p class="help">Tap the back of your phone on a Habitor NFC tag.</p>
+    {{ p.nfc_reader('auto', None, None, None, 'Start NFC reader') }}
+  </section>
+</div>
+{% endmacro %}
+
+{# ================================================================ errors / offline #}
+{% macro page_error() %}
+<section class="card narrow center error-page">
+  <p class="error-code">{{ status }}</p>
+  <h1>{{ {404: 'Page not found', 403: 'Access denied', 500: 'Something went wrong'}.get(status, 'Request failed') }}</h1>
+  <p class="muted">{{ {404: "The page you're looking for doesn't exist or has moved.", 403: "You don't have permission to do that.", 500: 'Please try again in a moment.'}.get(status, detail) }}</p>
+  <div class="button-row center"><a class="btn" href="/">Go to Today</a><a class="btn btn-secondary" href="/" data-back>Go back</a></div>
+</section>
+{% endmacro %}
+
+{% macro page_offline() %}
+<section class="card narrow center error-page">
+  <span class="hero-icon">{{ p.icon('refresh') }}</span>
+  <h1>You're offline</h1>
+  <p class="muted">Check your connection. Your quests will be here when you're back.</p>
+  <a class="btn" href="/">Try again</a>
+</section>
+{% endmacro %}
+
+{% set pages = {
+  'auth': page_auth, 'home': page_home, 'habits': page_habits, 'habit_form': page_habit_form,
+  'habit_qr': page_habit_qr, 'qr_confirm': page_qr_confirm, 'timer': page_timer, 'feed': page_feed,
+  'boards': page_boards, 'profile': page_profile, 'stats': page_stats, 'recap': page_recap,
+  'friends': page_friends, 'invite_confirm': page_invite_confirm, 'parties': page_parties,
+  'party_join': page_party_join, 'party': page_party, 'challenges': page_challenges, 'boss': page_boss,
+  'map': page_map, 'prove': page_prove, 'settings': page_settings, 'notifications': page_notifications,
+  'error': page_error, 'offline': page_offline, 'scan': page_scan,
+} %}
+<div class="page" data-page="{{ page }}">{{ pages[page]() }}</div>
+{% endblock %}
